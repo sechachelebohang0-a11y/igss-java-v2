@@ -1,0 +1,13 @@
+
+# Java build output
+target/
+out/
+build/
+
+# IntelliJ temporary and personal settings
+.idea/
+*.iml
+
+# Operating system files
+.DS_Store
+Thumbs.db
