@@ -1,5 +1,8 @@
 package lesotho.igss;
 
+import lesotho.igss.Models.Citizen;
+import lesotho.igss.Models.Doc;
+
 import java.util.*;
 
 /** Page building blocks. The whole system uses one blue palette. */
@@ -29,7 +32,7 @@ final class Html {
         ICONS.put("up", "<path d='M12 16V5M7 10l5-5 5 5M4 20h16'/>");
     }
 
-    static final String CSS = "*{box-sizing:border-box}body{margin:0;background:#e6eefc;color:#0a2a8f;font:15px Arial,Helvetica,sans-serif}"
+    static final String CSS = "*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#e6eefc;color:#0a2a8f;font:15px Arial,Helvetica,sans-serif}"
             + "#app{max-width:540px;margin:0 auto;min-height:100vh;background:#fff;box-shadow:0 0 30px #1a4fb433}a{color:inherit;text-decoration:none}"
             + ".hdr{background:#1a4fb4;color:#fff;padding:22px 22px 24px;border-radius:0 0 26px 26px}.hdr a{font-size:14px;font-weight:700;opacity:.92}.hdr h1{margin:10px 0 0;font-size:24px}"
             + ".body{padding:18px 20px 34px;display:flex;flex-direction:column;gap:14px}.in{margin:0;font-size:16px;font-weight:700;line-height:1.35}"
@@ -47,7 +50,10 @@ final class Html {
             + ".sp:not(:last-child):before{content:'';position:absolute;left:13px;top:28px;bottom:0;width:2px;background:#c9d6f0}.sp b{padding-top:4px}.sp small{display:block;color:#5f6f8c;font-weight:400}"
             + ".bar{height:8px;border-radius:5px;background:#c9d6f0}.bar i{display:block;height:8px;border-radius:5px;background:#1a4fb4}.mu{color:#5f6f8c;font-size:12px}form{margin:0}"
             + "img.ph{width:96px;height:96px;object-fit:cover;border-radius:12px;border:2px solid #1a4fb4}img.big{max-width:100%;border-radius:12px;border:1px solid #c9d6f0}"
-            + ".two{display:flex;gap:12px;align-items:center}.two>div{flex:1}input[type=file]{padding:9px;width:100%}";
+            + "div.ph{width:150px;height:190px;border:2px dashed #9db4e6;border-radius:12px;background:#f6f9ff;display:flex;align-items:center;justify-content:center;overflow:hidden;margin:8px 0;font-size:12px;text-align:center;color:#5f6f8c}div.ph img{width:100%;height:100%;object-fit:cover}"
+            + "video{width:100%;max-width:320px;border-radius:12px;background:#000;transform:scaleX(-1);margin:8px 0;display:block}.row{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0}"
+            + ".two{display:flex;gap:12px;align-items:center}.two>div{flex:1}input[type=file]{padding:9px;width:100%}"
+            + ".av{width:48px;height:48px;border-radius:50%;flex:none!important;border:2px solid #1a4fb4;background:#dbe6fb;color:#0a2a8f;font-weight:700;display:flex;align-items:center;justify-content:center;object-fit:cover}img.av{display:block}";
 
     static String esc(String s) {
         if (s == null) return "";
@@ -77,8 +83,8 @@ final class Html {
     static String pill(String t) {
         String c;
         switch (t) {
-            case "Verified": case "Approved": case "Completed": case "Paid": case "Alive": case "Logged": case "Enrolled": c = "d"; break;
-            case "Needs info": case "Missing": case "Overdue": case "Rejected": case "Deceased": case "Payment required": c = "o"; break;
+            case "Verified": case "Approved": case "Completed": case "Paid": case "Alive": case "Logged": case "Enrolled": case "Ready to collect": c = "d"; break;
+            case "Needs info": case "Missing": case "Overdue": case "Rejected": case "Deceased": case "Payment required": case "Cancelled": c = "o"; break;
             default: c = "m";
         }
         return "<span class='pl " + c + "'>" + esc(t) + "</span>";
@@ -96,6 +102,23 @@ final class Html {
         return href == null ? "<div class='rw'>" + inner + "</div>" : "<a class='rw' href='" + href + "'>" + inner + "</a>";
     }
 
+    /** Round picture of a citizen: their photo when allowed and on file, otherwise their initials. */
+    static String avatar(Citizen c, boolean allowPhoto, int px) {
+        Doc ph = allowPhoto ? Store.docOf(c.id, "Passport photo") : null;
+        String st = "width:" + px + "px;height:" + px + "px;font-size:" + Math.max(11, px / 3) + "px";
+        if (ph != null && ph.stored != null && ph.mime != null && ph.mime.startsWith("image/"))
+            return "<img class='av' style='" + st + "' src='/file?id=" + ph.id + "' alt='" + esc(c.name) + "'>";
+        StringBuilder in = new StringBuilder();
+        for (String w : c.name.trim().split("\\s+")) if (!w.isEmpty() && in.length() < 2) in.append(Character.toUpperCase(w.charAt(0)));
+        return "<div class='av' style='" + st + "'>" + esc(in.toString()) + "</div>";
+    }
+
+    /** Same as row(), with a picture in front. */
+    static String rowAv(String avatarHtml, String title, String sub, String pillHtml, String href) {
+        String inner = avatarHtml + "<div><b>" + esc(title) + "</b><small>" + esc(sub) + "</small></div>" + (pillHtml == null ? "" : pillHtml) + (href == null ? "" : "<span class='mu'>&rsaquo;</span>");
+        return href == null ? "<div class='rw'>" + inner + "</div>" : "<a class='rw' href='" + href + "'>" + inner + "</a>";
+    }
+
     static String card(String inner) { return "<div class='card'>" + inner + "</div>"; }
 
     /**
@@ -110,12 +133,25 @@ final class Html {
                 + (guard ? " readonly onfocus=\"this.removeAttribute('readonly')\"" : "") + "></label>";
     }
 
+    /** Same as field(), with an error under the box (red box, red icon and message). An empty error gives the normal box. */
+    static String fieldErr(String label, String name, String type, String value, String error) {
+        String f = field(label, name, type, value);
+        if (error == null || error.isEmpty()) return f;
+        return f.replaceFirst("<label class='f'>", "<label class='f bad'>") + "<div class='fe' role='alert'><i>!</i><span>" + esc(error) + "</span></div>";
+    }
+
     /** options are "value|label" strings. */
     static String select(String label, String name, String... options) {
+        return selectOf(label, name, null, options);
+    }
+
+    /** Same as select(), with one option already chosen. */
+    static String selectOf(String label, String name, String selected, String... options) {
         StringBuilder sb = new StringBuilder("<label class='f'>" + esc(label) + "<select name='" + name + "'>");
         for (String o : options) {
             String[] p = o.split("\\|", 2);
-            sb.append("<option value='").append(esc(p[0])).append("'>").append(esc(p.length > 1 ? p[1] : p[0])).append("</option>");
+            sb.append("<option value='").append(esc(p[0])).append("'").append(p[0].equals(selected) ? " selected" : "").append(">")
+                    .append(esc(p.length > 1 ? p[1] : p[0])).append("</option>");
         }
         return sb.append("</select></label>").toString();
     }

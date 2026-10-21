@@ -80,22 +80,26 @@ final class DepartmentPages {
     static Resp login(Req r) {
         Dept dept = dept(r.get("dept"));
         if (dept == null) return Resp.redirect("/staff/departments");
+        String sv = "", idErr = "", pwErr = "";
         if (r.post()) {
-            Official o = Store.official(r.get("staff"));
+            sv = r.get("staff");
+            Official o = Store.official(sv);
             String pw = r.p.getOrDefault("password", "");
-            if (o != null && o.dept == dept && Store.hash(o.salt, pw).equals(o.hash)) {
+            if (sv.isEmpty()) idErr = "Enter your staff ID.";
+            else if (o == null || o.dept != dept) idErr = "Couldn't find that staff ID in " + dept.label + ". Check it and try again.";
+            else if (pw.isEmpty()) pwErr = "Enter your password.";
+            else if (!Store.hash(o.salt, pw).equals(o.hash)) pwErr = "Wrong password. Try again.";
+            else {
                 Resp resp = Resp.redirect("/staff");
                 resp.newSession = new Sess("O", o.staffId);
                 return resp;
             }
-            // one message for every failure, so nobody can find out which staff IDs exist
-            return Resp.to("/staff/login?dept=" + dept.name(), "err:Wrong staff ID or password for " + dept.label + ".");
         }
         return shell(dept.label + " Login",
                 "<div class='top'><a href='/staff/departments' aria-label='Back'>&lt;</a><h2>" + Html.esc(dept.label) + " Login</h2></div>"
                         + "<p class='in'>Staff only. Every action is logged.</p>" + Html.banner(r.get("m"))
                         + "<form method='post' action='/staff/login' autocomplete='off'>" + Html.hidden("dept", dept.name())
-                        + Html.field("Staff ID", "staff", "text", "") + Html.field("Password", "password", "password", "")
+                        + Html.fieldErr("Staff ID", "staff", "text", sv, idErr) + Html.fieldErr("Password", "password", "password", "", pwErr)
                         + "<button class='btn'>Login</button></form>"
                         + "<div class='grow'></div><a class='back' href='/staff/departments'>Back</a>" + FOOT);
     }

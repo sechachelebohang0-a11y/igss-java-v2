@@ -17,9 +17,13 @@ final class FilePage {
         Official o = r.staff();
         boolean owner = me != null && me.id.equals(d.citizenId);
         if (!owner) {
-            if (o == null || !Policy.canView(o, d)) return Resp.error(403, "You are not allowed to open this file.");
+            // Police may open fingerprints for an investigation. It is logged, but the citizen is not sent a message.
+            boolean policeFingerprints = d.type.equals("Fingerprints") && o != null && o.dept == Dept.PO;
+            if (o == null || (!policeFingerprints && !Policy.canView(o, d))) return Resp.error(403, "You are not allowed to open this file.");
             boolean photoByPolicy = d.type.equals("Passport photo") && Policy.allowed(o.dept).contains(Policy.Field.PHOTO);
-            if (!photoByPolicy) {
+            if (policeFingerprints) {
+                Store.logAccess(d.citizenId, o.dept, o.name, "Fingerprints", "Police investigation");
+            } else if (!photoByPolicy) {
                 Store.logAccess(d.citizenId, o.dept, o.name, "Document: " + d.type, "Opened while processing an application");
                 Store.notify(d.citizenId, o.dept.label + " opened your " + d.type + " while processing your application.");
             }

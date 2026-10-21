@@ -18,7 +18,7 @@ public final class Models {
 
     public enum Status {
         PAYMENT_DUE("Payment required"), VERIFIED("Identity verified"), PROCESSING("Processing"), NEEDS_INFO("Needs info"),
-        APPROVED("Approved"), COMPLETED("Completed"), REJECTED("Rejected");
+        APPROVED("Approved"), READY("Ready to collect"), COMPLETED("Completed"), REJECTED("Rejected");
 
         public final String label;
         Status(String label) { this.label = label; }
@@ -50,6 +50,50 @@ public final class Models {
     public static class AccessEntry { public String citizenId, officer, fields, purpose; public Dept dept; public LocalDateTime time; }
 
     public static class Ticket { public int id; public String citizenId, number, service; public Dept dept; public LocalDateTime time; public boolean served; }
+
+    /** A booked time at a department. status is Booked or Cancelled. */
+    public static class Appointment {
+        public int id;
+        public String citizenId, service, status;
+        public Dept dept;
+        public LocalDateTime slot, created;
+    }
+
+    /** Police ask Home Affairs for a citizen's address. status is Pending, Approved or Rejected. */
+    public static class AddressRequest {
+        public int id;
+        public String citizenId, caseNo, reason, officer, status, decidedBy;
+        public LocalDateTime requested, decided;
+    }
+
+    /** A police case. status is Open case, Under investigation, Suspect identified, In court or Closed. citizenId is the person the case is about (can be null). */
+    public static class CaseRec {
+        public int id;
+        public String caseNo, title, details, citizenId, officer, status;
+        public LocalDateTime opened, updated;
+    }
+
+    /** One update in the history of a police case. */
+    public static class CaseNote {
+        public int id;
+        public String caseNo, officer, text;
+        public LocalDateTime time;
+    }
+
+    /** A lost or stolen ID card or passport recorded by Police. status is Reported or Found. */
+    public static class LostDoc {
+        public int id;
+        public String citizenId, docType, docNo, place, details, officer, caseNo, status;
+        public LocalDate lostDate;
+        public LocalDateTime created;
+    }
+
+    /** A vehicle or driving licence record held by Traffic. */
+    public static class TrafficRec {
+        public int id;
+        public String citizenId, kind, detail, status;
+        public LocalDateTime created;
+    }
 
     /** kind is FEE (service fee) or PENSION (monthly pension). */
     public static class Payment {
