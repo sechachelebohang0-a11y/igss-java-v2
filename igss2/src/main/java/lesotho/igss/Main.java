@@ -28,6 +28,8 @@ public final class Main {
         Store.initPassports();
         Store.initTax();
         Store.initIdCards();
+        Store.initTraffic();
+        Certificates.init();
         Db.exec("update applications set service='Change of Names' where service='Change of Name'");
         Db.exec("update applications set service='Change of Ownership' where service='Vehicle Ownership Transfer'");
         System.out.println("Database file: " + java.nio.file.Paths.get(db).toAbsolutePath());
@@ -191,6 +193,11 @@ public final class Main {
             case "/staff/address": return StaffPages.address(r);
             case "/staff/clearance": return StaffPages.clearance(r);
             case "/lookup": return Registry.lookup(r);
+            case "/staff/issue": return StaffPages.issue(r);
+            case "/certificate": return Certificates.page(r);
+            case "/verify": return Certificates.verify(r);
+            case "/staff/fines": return StaffPages.fines(r);
+            case "/staff/traffic": return StaffPages.trafficRecords(r);
             case "/staff/govt": return StaffPages.govt(r);
             case "/staff/records": return StaffPages.records(r);
             case "/staff/flags": return TravelFlags.page(r);

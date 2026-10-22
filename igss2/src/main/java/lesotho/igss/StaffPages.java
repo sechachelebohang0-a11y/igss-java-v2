@@ -64,11 +64,16 @@ final class StaffPages {
                 t.add(new String[]{"/staff/fees", "card", "Fees & Receipts"});
                 t.add(new String[]{"/staff/payments", "coin", "Grant & Pension Payments"});
                 t.add(new String[]{"/staff/records", "chart", "Financial Records"});
-                t.add(new String[]{"/staff/govt", "user", "Government Workers"});
+                t.add(new String[]{"/staff/govt", "user", "Government Workers (read only)"});
                 break;
             case PE:
                 t.add(new String[]{"/staff/pension", "coin", "Pension Register"});
                 t.add(new String[]{"/staff/govt", "user", "Government Workers"});
+                break;
+            case TR:
+                t.add(new String[]{"/staff/traffic", "doc", "Licence & Vehicle Register"});
+                t.add(new String[]{"/staff/issue", "id", "Tests & Certificates"});
+                t.add(new String[]{"/staff/fines", "alert", "Traffic Offences & Fines"});
                 break;
             case PO:
                 t.add(new String[]{"/staff/police", "fp", "Criminal Search"});
@@ -148,8 +153,8 @@ final class StaffPages {
                         ? Html.selectOf("Collection office (used with Ready to collect)", "office", Policy.officeFor(c.address), Policy.OFFICES.toArray(new String[0])) : "";
                 boolean clr = a.service.equals(CLEARANCE);
                 action = (clr ? clearancePanel(a, c) : "") + Html.form("/staff/update", Html.hidden("id", String.valueOf(a.id))
-                        + (clr ? Html.select("New status", "status", "PROCESSING|Processing", "NEEDS_INFO|Needs more information", "READY|Ready to collect (no criminal record)", "COMPLETED|Collected", "REJECTED|Not cleared")
-                        : o.dept == Dept.PO ? Html.select("New status", "status", "PROCESSING|Under investigation", "NEEDS_INFO|Needs more information", "COMPLETED|Resolved", "REJECTED|Closed (no case)")
+                        + (clr ? Html.select("New status", "status", "PROCESSING|Processing", "NEEDS_INFO|Needs info", "READY|Ready to collect (no criminal record)", "COMPLETED|Collected", "REJECTED|Not cleared")
+                        : o.dept == Dept.PO ? Html.select("New status", "status", "PROCESSING|Under investigation", "NEEDS_INFO|Needs info", "COMPLETED|Resolved", "REJECTED|Closed (no case)")
                         : Html.select("New status", "status", "PROCESSING|Processing", "NEEDS_INFO|Needs info", "APPROVED|Approved", "READY|Ready to collect", "COMPLETED|Completed (collected)", "REJECTED|Rejected"))
                         + officeBox + Html.field("Note to citizen (optional)", "note", "text", "") + "<br>" + Html.button("Update status"));
             }
@@ -440,7 +445,7 @@ final class StaffPages {
             boolean stopped = why != null;
             String act = p.paid || stopped ? "" : Html.form("/staff/payments", Html.hidden("id", String.valueOf(p.id)) + "<button class='sm'>Mark paid</button>");
             sb.append("<div class='rw'>").append(av(o, c, 40)).append("<div><b>").append(Html.esc(c.name)).append("</b><small>ID ").append(c.id).append(" · ").append(Html.esc(Policy.benefitLabel(p.kind))).append(" · M ").append(p.amount).append(" · ").append(p.month)
-                    .append("<br>Home Affairs: ").append(c.alive ? "alive" : "deceased").append(" · Employment: ").append(Store.govtWorker(c.id) ? "government" + (Store.benefitChoice(c.id) == null ? " (no choice yet)" : ", chose the " + Policy.benefitLabel(Store.benefitChoice(c.id)).toLowerCase()) : "private sector")
+                    .append("<br>Home Affairs says: ").append(c.alive ? "alive" : "deceased").append(" · Pensions says employment: ").append(Store.govtWorker(c.id) ? "government" + (Store.benefitChoice(c.id) == null ? " (no choice yet)" : ", chose the " + Policy.benefitLabel(Store.benefitChoice(c.id)).toLowerCase()) : "private sector")
                     .append(stopped ? "<br>Stopped: " + Html.esc(why) : "").append("</small></div>").append(Html.pill(p.paid ? "Paid" : stopped ? "Rejected" : "Pending")).append(act).append("</div>");
         }
         if (l.isEmpty()) sb.append(Html.mu("No payments sent yet."));
@@ -497,8 +502,8 @@ final class StaffPages {
         for (Dept d : Dept.values()) if (d != Dept.FI) depts.add(d.name() + "|" + d.label);
         sb.append(Html.label("TAX HELD BACK FOR LRA (FROM GRANTS AND PENSIONS)"));
         sb.append(Html.card("<span class='mu'>Sent to LRA so far</span><b style='font-size:22px'>M " + Store.lraTotal() + "</b>"));
-        for (String[] t : Store.lraTransfers()) sb.append(Html.row(Html.esc(String.valueOf(t[1])), "ID " + t[0] + " · " + Html.esc(t[3]), "<span class='pl m'>M " + t[2] + "</span>", null));
-        for (String[] t : Store.taxOwing()) sb.append(Html.row(Html.esc(String.valueOf(t[1])), "LRA says this person owes tax. It is taken from the next payment.", "<span class='pl m'>M " + t[2] + "</span>", null));
+        for (String[] t : Store.lraTransfers()) sb.append(Html.row(String.valueOf(t[1]), "ID " + t[0] + " · " + t[3], "<span class='pl m'>M " + t[2] + "</span>", null));
+        for (String[] t : Store.taxOwing()) sb.append(Html.row(String.valueOf(t[1]), "LRA says this person owes tax. It is taken from the next payment.", "<span class='pl m'>M " + t[2] + "</span>", null));
         sb.append(Html.form("/staff/records", Html.hidden("act", "tax") + Html.field("ID number", "id", "text", "") + Html.field("Tax LRA says is owed (Maloti)", "owed", "text", "") + "<br>" + Html.button("Save LRA notice")));
         sb.append(Html.label("ALLOCATE MONEY TO A DEPARTMENT"));
         sb.append(Html.form("/staff/records", Html.selectOf("Department", "dept", "", depts.toArray(new String[0])) + Html.field("Amount (Maloti)", "amount", "text", "")
@@ -535,7 +540,9 @@ final class StaffPages {
         Official o = r.staff();
         if (o == null) return needLogin();
         if (o.dept != Dept.FI && o.dept != Dept.PE) return Resp.to("/staff", "err:Finance and Pensions staff only.");
+        boolean owner = o.dept == Dept.PE; // Pensions keeps this record. Finance can only read it.
         if (r.post()) {
+            if (!owner) return Resp.to("/staff/govt", "err:Only Pensions can change the government workers list. Finance can read it.");
             Citizen c = Store.citizen(r.get("id"));
             if (c == null) return Resp.to("/staff/govt", "err:No citizen with that ID number in the register.");
             if (r.get("act").equals("remove")) {
@@ -551,17 +558,163 @@ final class StaffPages {
             Store.notify(c.id, o.dept.label + " recorded that you work for the government (" + ministry + "). When you retire you choose either the old-age grant or the retirement pension. You cannot receive both.");
             return Resp.to("/staff/govt", "ok:" + c.name + " is marked as a government worker. They must choose the grant or the pension, not both.");
         }
-        StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("People who work or worked for the government get only one of the two benefits: the old-age grant or the retirement pension. Finance and Pensions keep this list and check it before paying.")
+        StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("People who work or worked for the government get only one of the two benefits: the old-age grant or the retirement pension. Pensions keeps this list, and Finance checks it before paying.")
                 + Html.card("<b>How benefits work</b><span class='mu'>" + Html.esc(Policy.PENSION_RULE) + "</span>"));
-        sb.append(Html.form("/staff/govt", Html.hidden("act", "add") + Html.field("ID number", "id", "text", "") + Html.field("Ministry or department (optional)", "ministry", "text", "")
+        if (owner) sb.append(Html.form("/staff/govt", Html.hidden("act", "add") + Html.field("ID number", "id", "text", "") + Html.field("Ministry or department (optional)", "ministry", "text", "")
                 + "<br>" + Html.button("Mark as government worker")));
+        else sb.append(Html.card("<b>Read only</b><span class='mu'>Pensions keeps this list. Finance uses it to check who may receive the grant, the pension or both before paying.</span>"));
         sb.append(Html.label("GOVERNMENT WORKERS"));
         List<Citizen> l = Store.govtWorkers();
         for (Citizen c : l)
             sb.append("<div class='rw'>").append(av(o, c, 40)).append("<div><b>").append(Html.esc(c.name)).append("</b><small>ID ").append(c.id).append(" · ").append(Html.esc(Store.govtMinistry(c.id))).append(Store.benefitChoice(c.id) == null ? "" : " · chose the " + Policy.benefitLabel(Store.benefitChoice(c.id)).toLowerCase())
-                    .append("</small></div>").append(Html.form("/staff/govt", Html.hidden("id", c.id) + Html.hidden("act", "remove") + "<button class='sm'>Remove</button>")).append("</div>");
+                    .append("</small></div>").append(owner ? Html.form("/staff/govt", Html.hidden("id", c.id) + Html.hidden("act", "remove") + "<button class='sm'>Remove</button>") : "").append("</div>");
         if (l.isEmpty()) sb.append(Html.mu("Nobody is marked yet."));
         return Resp.html(Html.page("Government Workers", B, "/staff", sb.toString()));
+    }
+
+    // ================================================================== TRAFFIC
+    /**
+     * Tests and inspections. The citizen books an appointment and comes to the office. Here the officer records the result.
+     * A pass issues the learner's licence, the driving licence or the roadworthy certificate straight to the citizen.
+     */
+    static Resp issue(Req r) {
+        Official o = r.staff();
+        Resp bad = only(o, Dept.TR);
+        if (bad != null) return bad;
+        String back = "/staff/issue";
+        if (r.post()) {
+            Citizen c = Store.citizen(r.get("id"));
+            String type = r.get("type"), result = r.get("result"), klass = r.get("klass"), note = r.get("note");
+            if (c == null) return Resp.to(back, "err:That ID number is not in the register. Check the 11 digits.");
+            if (!c.alive) return Resp.to(back, "err:Home Affairs records this person as deceased.");
+            if (!Certificates.TYPES.contains(type)) return Resp.to(back, "err:Choose what was tested.");
+            boolean licence = !type.equals(Certificates.ROADWORTHY);
+            String detail;
+            if (licence) {
+                if (!Certificates.CLASSES.contains(klass)) return Resp.to(back, "err:Choose the class of vehicle.");
+                detail = "Class: " + klass;
+            } else {
+                String plate = r.get("plate").toUpperCase(), make = r.get("make"), model = r.get("model");
+                if (plate.length() < 3 || plate.length() > 12 || make.isEmpty() || model.isEmpty()) return Resp.to(back, "err:Write the number plate, make and model of the vehicle.");
+                detail = "Number plate: " + plate + " | Make: " + make + " | Model: " + model;
+            }
+            if (result.equals("Failed")) {
+                if (note.length() < 3) return Resp.to(back, "err:Write why it failed, so the citizen knows what to fix or practise.");
+                Store.notify(c.id, "Your " + type.toLowerCase() + (licence ? " test" : " inspection") + " did not pass. " + note + " Book another appointment at Traffic Services when you are ready.");
+                Store.logAccess(c.id, o.dept, o.name, "Name, ID number", type + " not passed");
+                return Resp.to(back, "ok:Result saved. " + c.name + " was told and can book again.");
+            }
+            if (!result.equals("Passed")) return Resp.to(back, "err:Choose Passed or Failed.");
+            if (!r.get("paid").equals("yes")) return Resp.to(back, "err:Collect the fee (M " + Certificates.fee(type) + ") at the office first, then choose Yes.");
+            int age = Policy.age(c, LocalDate.now());
+            if (type.equals(Certificates.LEARNER) && age < 16) return Resp.to(back, "err:A learner's licence is for people aged 16 or older. This person is " + age + ".");
+            if (type.equals(Certificates.DRIVING)) {
+                if (age < 18) return Resp.to(back, "err:A driving licence is for people aged 18 or older. This person is " + age + ".");
+                if (!Certificates.hasValid(c.id, Certificates.LEARNER)) return Resp.to(back, "err:This person has no valid learner's licence. They must pass the learner's test first.");
+            }
+            String[] cert = Certificates.issue(c.id, type, detail, o.name);
+            Store.addTraffic(c.id, licence ? (type.equals(Certificates.LEARNER) ? "Learner's licence" : "Driving licence") : "Roadworthy certificate",
+                    cert[3] + " | " + detail.replace(" | ", " · ") + " · valid until " + cert[6], "Valid");
+            Store.logAccess(c.id, o.dept, o.name, "Name, ID number", type + " issued " + cert[3]);
+            Store.notify(c.id, "You passed. Traffic Services issued your " + type + ", number " + cert[3] + ". Open it under Traffic Services, My certificates. You can print it. Anyone can check it with the code " + Certificates.showCode(cert[8]) + ".");
+            return Resp.to(back, "ok:" + type + " " + cert[3] + " issued to " + c.name + ". The citizen can open and print it.");
+        }
+        String pid = r.get("id");
+        StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("The citizen books a test or an inspection and comes to the office. Record the result here. When they pass, the learner's licence, driving licence or roadworthy certificate is issued to them straight away."));
+        String klassOpts[] = Certificates.CLASSES.toArray(new String[0]);
+        sb.append(Html.form("/staff/issue", Html.field("Citizen's ID number", "id", "text", pid)
+                + Html.selectOf("What was tested?", "type", r.get("type"), Certificates.TYPES.toArray(new String[0]))
+                + Html.selectOf("Result", "result", "", "Passed", "Failed")
+                + Html.selectOf("Class of vehicle (licences only)", "klass", "", klassOpts)
+                + Html.field("Number plate (roadworthy only)", "plate", "text", "") + Html.field("Make (roadworthy only)", "make", "text", "") + Html.field("Model (roadworthy only)", "model", "text", "")
+                + Html.select("Fee paid at the office? (Learner's M 50, Driving M 150, Roadworthy M 80)", "paid", "no|No", "yes|Yes")
+                + Html.field("Note (required if failed)", "note", "text", "") + "<br>" + Html.button("Save result")));
+        sb.append(Html.label("BOOKED TESTS AND INSPECTIONS"));
+        int n = 0;
+        for (Appointment ap : Store.upcoming(Dept.TR)) {
+            String s = ap.service == null ? "" : ap.service.toLowerCase();
+            if (!(s.contains("learner") || s.contains("roadworthy") || s.equals("driving test"))) continue;
+            n++;
+            Citizen c = Store.citizen(ap.citizenId);
+            String t = s.contains("learner") ? Certificates.LEARNER : s.contains("roadworthy") ? Certificates.ROADWORTHY : Certificates.DRIVING;
+            sb.append(Html.rowAv(av(o, c, 40), c.name, ap.service + " · " + CitizenPages.WHEN.format(ap.slot) + " · ID " + c.id,
+                    "<a class='sm' href='/staff/issue?id=" + c.id + "&type=" + t.replace(" ", "%20").replace("'", "%27") + "'>Record result</a>", null));
+        }
+        if (n == 0) sb.append(Html.mu("No tests or inspections are booked."));
+        sb.append(Html.label("RECENTLY ISSUED"));
+        List<String[]> recent = Db.list("select * from certificates order by id desc limit 15", rs -> new String[]{rs.getString("citizen_id"), rs.getString("type"), rs.getString("number"), rs.getString("issued")});
+        for (String[] c : recent) { Citizen h = Store.citizen(c[0]); sb.append(Html.row(c[1] + " " + c[2], (h == null ? "" : h.name) + " · " + c[3], Html.pill("Issued"), null)); }
+        if (recent.isEmpty()) sb.append(Html.mu("Nothing issued yet."));
+        return Resp.html(Html.page("Tests & Certificates", B, "/staff", sb.toString()));
+    }
+
+    /** Offences and fines: Traffic records the offence, the citizen is told, and the fine is marked paid when the citizen pays at the office. */
+    static Resp fines(Req r) {
+        Official o = r.staff();
+        Resp bad = only(o, Dept.TR);
+        if (bad != null) return bad;
+        if (r.post()) {
+            if (r.get("act").equals("paid")) {
+                String[] f;
+                try { f = Store.fine(Integer.parseInt(r.get("id"))); } catch (Exception e) { f = null; }
+                if (f == null || !f[7].equals("Unpaid")) return Resp.to("/staff/fines", "err:Nothing to mark as paid.");
+                String receipt = Store.nextReceipt();
+                Store.payFine(Integer.parseInt(f[0]), receipt);
+                Store.notify(f[1], "Your fine of M " + f[3] + " for " + f[2] + " is paid. Receipt " + receipt + ".");
+                return Resp.to("/staff/fines", "ok:Marked as paid. Receipt " + receipt + ".");
+            }
+            Citizen c = Store.citizen(r.get("id"));
+            String offence = r.get("offence"), place = r.get("place"), amt = r.get("amount").replace(" ", "");
+            if (c == null) return Resp.to("/staff/fines", "err:That ID number is not in the register. Check the 11 digits.");
+            if (!Store.OFFENCES.contains(offence)) return Resp.to("/staff/fines", "err:Choose the offence.");
+            if (!amt.matches("[0-9]{1,6}") || Integer.parseInt(amt) <= 0) return Resp.to("/staff/fines", "err:Wrong amount. Write the fine in Maloti, digits only. Example: 300.");
+            if (place.length() < 3) return Resp.to("/staff/fines", "err:Write where it happened.");
+            if (place.length() > 100) place = place.substring(0, 100);
+            Store.addFine(c.id, offence, Integer.parseInt(amt), place, LocalDate.now().toString(), o.name);
+            Store.logAccess(c.id, o.dept, o.name, "Name, ID number", "Traffic fine: " + offence);
+            Store.notify(c.id, "Traffic Services recorded a fine of M " + Integer.parseInt(amt) + " for " + offence + " at " + place + ". Pay it at the Traffic office.");
+            return Resp.to("/staff/fines", "ok:Fine recorded for " + c.name + " and the citizen was told.");
+        }
+        StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("Record a traffic offence and its fine. The citizen is told, sees it under Traffic Services, and pays at the office."));
+        sb.append(Html.form("/staff/fines", Html.field("Driver's ID number", "id", "text", "") + Html.select("Offence", "offence", Store.OFFENCES.toArray(new String[0]))
+                + Html.field("Fine (Maloti)", "amount", "text", "") + Html.field("Where it happened", "place", "text", "") + "<br>" + Html.button("Record fine")));
+        sb.append(Html.label("RECENT FINES"));
+        List<String[]> l = Store.recentFines();
+        for (String[] f : l) {
+            Citizen c = Store.citizen(f[1]);
+            String act = f[7].equals("Unpaid") ? Html.form("/staff/fines", Html.hidden("id", f[0]) + Html.hidden("act", "paid") + "<button class='sm'>Mark paid</button>") : "";
+            sb.append("<div class='rw'>").append(av(o, c, 40)).append("<div><b>").append(Html.esc(c.name)).append("</b><small>").append(Html.esc(f[2])).append(" · M ").append(f[3]).append(" · ")
+                    .append(Html.esc(f[4])).append(" · ").append(f[5]).append(f[8] == null || f[8].isEmpty() ? "" : " · receipt " + f[8]).append("</small></div>").append(Html.pill(f[7])).append(act).append("</div>");
+        }
+        if (l.isEmpty()) sb.append(Html.mu("No fines recorded yet."));
+        return Resp.html(Html.page("Traffic Offences & Fines", B, "/staff", sb.toString()));
+    }
+
+    /** The traffic register: driving licences, vehicles, roadworthy certificates and fines of one person. Search by ID number, name or number plate. */
+    static Resp trafficRecords(Req r) {
+        Official o = r.staff();
+        Resp bad = only(o, Dept.TR);
+        if (bad != null) return bad;
+        String q = r.get("q");
+        StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("Look up the driving licence, vehicles, roadworthy certificates and fines of a person. Search by ID number, name or number plate."));
+        sb.append("<form method='get' action='/staff/traffic'>" + Html.field("ID number, name or number plate", "q", "text", q) + "<br>" + Html.button("Search") + "</form>");
+        if (!q.isEmpty()) {
+            List<String> ids = Store.searchTrafficPeople(q);
+            if (ids.isEmpty()) sb.append("<div class='err'>! Nobody matches that. Check the ID number, name or number plate.</div>");
+            for (String id : ids) {
+                Citizen c = Store.citizen(id);
+                if (c == null) continue;
+                Store.logAccess(c.id, o.dept, o.name, "Name, ID number, traffic records", "Traffic register search");
+                StringBuilder rec = new StringBuilder();
+                for (TrafficRec t : Store.trafficOf(c.id)) rec.append(Html.row(t.kind, t.detail, Html.pill(t.status), null));
+                if (rec.length() == 0) rec.append(Html.mu("No licence or vehicle on the register."));
+                StringBuilder fn = new StringBuilder();
+                for (String[] f : Store.finesOf(c.id)) fn.append(Html.row(f[2], "M " + f[3] + " · " + f[5], Html.pill(f[7]), null));
+                sb.append(Html.card("<div class='two'>" + av(o, c, 56) + "<div><b>" + Html.esc(c.name) + "</b><span class='mu'>ID " + c.id + " · born " + c.dob + (c.alive ? "" : " · Home Affairs: deceased") + "</span></div></div>"
+                        + Html.label("LICENCE, VEHICLES AND CERTIFICATES") + rec + (fn.length() > 0 ? Html.label("FINES") + fn : "")));
+            }
+        }
+        return Resp.html(Html.page("Licence & Vehicle Register", B, "/staff", sb.toString()));
     }
 
     // ================================================================== POLICE

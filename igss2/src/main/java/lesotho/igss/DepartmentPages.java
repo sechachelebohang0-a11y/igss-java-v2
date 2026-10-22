@@ -31,11 +31,11 @@ final class DepartmentPages {
         form{display:flex;flex-direction:column;margin-top:18px}
         label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#33466e;margin-bottom:14px}
         input{border:1.5px solid #c9d6f0;border-radius:10px;padding:13px;font-size:15px;background:#fff;color:#0a2a8f}
-        .btn{display:block;width:100%;border:0;border-radius:8px;background:#0b5ed7;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer;margin-top:6px}
-        .btn:hover{background:#0a53bd}
+        .btn{display:block;width:100%;border:0;border-radius:10px;background:#1a4fb4;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer;margin-top:6px}
+        .btn:hover{background:#143f91}
         .ok,.err{border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;margin-top:10px}
-        .ok{background:#dbe6fb;color:#0a2a8f}
-        .err{background:#fff;color:#1a4fb4;border:2px solid #1a4fb4}
+        .ok{background:#e6f4ea;color:#14532d;border:2px solid #14532d}
+        .err{background:#fff;color:#9b1c1c;border:2px solid #9b1c1c}
         .foot{text-align:center;color:#00209f;font-weight:700;font-size:11.5px;margin:22px 0 2px}
         """;
 

@@ -475,6 +475,9 @@ public final class Store {
     public static void lraTransfer(String citizenId, int amount, String ref) {
         Db.exec("insert into lra_transfers(citizen_id,amount,ref,created) values(?,?,?,?)", citizenId, amount, ref, LocalDateTime.now().toString());
     }
+    public static List<String[]> lraOf(String citizenId) {
+        return Db.list("select amount,ref,created from lra_transfers where citizen_id=? order by id desc", rs -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3)}, citizenId);
+    }
     public static int lraTotal() { return Db.count("select coalesce(sum(amount),0) from lra_transfers"); }
     public static List<String[]> lraTransfers() {
         return Db.list("select t.citizen_id,c.name,t.amount,t.ref,t.created from lra_transfers t left join citizens c on c.id=t.citizen_id order by t.id desc limit 30",
@@ -483,6 +486,29 @@ public final class Store {
     public static List<String[]> taxOwing() {
         return Db.list("select t.citizen_id,c.name,t.owed from tax_standing t left join citizens c on c.id=t.citizen_id where t.owed>0 order by c.name",
                 rs -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3)});
+    }
+
+    // ---------- Traffic fines and the traffic register ----------
+    public static final List<String> OFFENCES = List.of("Speeding", "Driving without a licence", "Driving an unroadworthy vehicle", "Overloading",
+            "Drink driving", "Not wearing a seatbelt", "Ignoring a traffic light or stop sign", "Using a phone while driving", "Parking offence", "Other");
+    public static void initTraffic() {
+        Db.exec("create table if not exists traffic_fines(id integer primary key autoincrement,citizen_id text,offence text,amount integer,place text,offence_date text,officer text,status text,receipt text,created text)");
+    }
+    public static int addFine(String citizenId, String offence, int amount, String place, String date, String officer) {
+        return Db.insert("insert into traffic_fines(citizen_id,offence,amount,place,offence_date,officer,status,receipt,created) values(?,?,?,?,?,?,?,?,?)",
+                citizenId, offence, amount, place, date, officer, "Unpaid", "", LocalDateTime.now().toString());
+    }
+    private static final Db.Mapper<String[]> FINE = rs -> new String[]{rs.getString("id"), rs.getString("citizen_id"), rs.getString("offence"), rs.getString("amount"),
+            rs.getString("place"), rs.getString("offence_date"), rs.getString("officer"), rs.getString("status"), rs.getString("receipt")};
+    /** {id, citizen_id, offence, amount, place, date, officer, status, receipt} */
+    public static List<String[]> finesOf(String citizenId) { return Db.list("select * from traffic_fines where citizen_id=? order by id desc", FINE, citizenId); }
+    public static List<String[]> recentFines() { return Db.list("select * from traffic_fines order by (status='Paid'), id desc limit 40", FINE); }
+    public static String[] fine(int id) { return Db.one("select * from traffic_fines where id=?", FINE, id); }
+    public static void payFine(int id, String receipt) { Db.exec("update traffic_fines set status='Paid', receipt=? where id=?", receipt, id); }
+    public static List<String> searchTrafficPeople(String q) {
+        String like = "%" + q.toLowerCase() + "%";
+        return Db.list("select distinct c.id from citizens c left join traffic_records t on t.citizen_id=c.id where c.id=? or lower(c.name) like ? or lower(t.detail) like ? order by c.name limit 20",
+                rs -> rs.getString(1), Store.norm(q), like, like);
     }
 
     // ---------- ID cards, name changes and notices to departments ----------

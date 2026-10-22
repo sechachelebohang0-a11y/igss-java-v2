@@ -30,8 +30,8 @@ final class LandingPage {
         .ph{width:96px;height:96px;border:2px dashed #00209f;color:#00209f;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;line-height:1.2}
         .brand h1{margin:0;font-size:15px;line-height:1.25;color:#00209f}
         .grow{flex:1;min-height:60px}
-        .btn{display:block;width:100%;border:0;border-radius:8px;background:#0b5ed7;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer}
-        .btn:hover{background:#0a53bd}
+        .btn{display:block;width:100%;border:0;border-radius:8px;background:#1a4fb4;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer}
+        .btn:hover{background:#143f91}
         h2.t{color:#00209f;font-size:17px;margin:56px 0 0}
         p.s{color:#475569;font-weight:700;font-size:15px;margin:22px 0 12px}
         .card{background:#fff;border:1px solid #6b7280;border-radius:12px;overflow:hidden}

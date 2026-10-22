@@ -16,7 +16,7 @@ final class Registry {
     static String benefitKind(String service) { return OLD_AGE.equals(service) ? "GRANT" : RETIRE.equals(service) ? "PENSION" : null; }
 
     /** Services that need a booked appointment first (the ID card or the licence is made at the office). Empty this set to switch the rule off. */
-    static final Set<String> NEEDS_APPOINTMENT = Set.of("Driving Licence Renewal", "Licence Replacement");
+    static final Set<String> NEEDS_APPOINTMENT = Set.<String>of();
 
     /** A status where the document or decision is issued. */
     static boolean issuing(Status st) { return st == Status.APPROVED || st == Status.READY || st == Status.COMPLETED; }
@@ -55,6 +55,12 @@ final class Registry {
             if (ch == null) return Resp.to("/pension", "err:You are a government employee and you are retired. Choose the old-age grant or the retirement pension first. You cannot receive both.");
             if (!ch.equals(kind)) return Resp.to(back, "err:You chose the " + Policy.benefitLabel(ch) + ". A government employee cannot also receive the " + Policy.benefitLabel(kind) + ".");
         }
+        if (sv.name.equals("Learner's Licence") && Policy.age(me, LocalDate.now()) < 16)
+            return Resp.to(back, "err:A learner's licence is for people aged 16 or older.");
+        if (sv.name.equals("Driving Licence (new)")) {
+            if (Policy.age(me, LocalDate.now()) < 18) return Resp.to(back, "err:A driving licence is for people aged 18 or older.");
+            if (!Store.hasIssued(me.id, "Learner's Licence")) return Resp.to(back, "err:You need an approved learner's licence first. Apply for the Learner's Licence.");
+        }
         if (sv.name.equals("First-time ID Card") && Store.hasIdCard(me.id))
             return Resp.to(back, "err:You already have a national ID card. If it is lost, damaged or expiring, use ID Replacement or ID Renewal.");
         if (sv.name.equals("First-time ID Card") && Db.count("select count(*) from applications where citizen_id=? and service=? and status not in ('REJECTED','COMPLETED')", me.id, sv.name) > 0)
@@ -63,8 +69,8 @@ final class Registry {
             return Resp.to(back, "err:You do not have an ID card yet. Apply for the First-time ID Card.");
         if (sv.name.equals("First-time ID Card") && Policy.age(me, LocalDate.now()) < 16)
             return Resp.to(back, "err:A national ID card is for people aged 16 or older.");
-        if (sv.name.startsWith("D Permit") && !Store.hasIssued(me.id, "Roadworthy Certificate"))
-            return Resp.to("/services?dept=TR", "err:You cannot apply for a D Permit without a Roadworthy Certificate. Apply for the Roadworthy Certificate first and wait until it is approved.");
+        if (sv.name.startsWith("D Permit") && !Certificates.hasValid(me.id, Certificates.ROADWORTHY))
+            return Resp.to("/services?dept=TR", "err:You cannot apply for a D Permit without a Roadworthy Certificate. Book a roadworthy inspection at Traffic Services. When your vehicle passes, you get the certificate and can apply.");
         if (NEEDS_APPOINTMENT.contains(sv.name) && !Store.hasUpcomingBooking(me.id, d))
             return Resp.to(CitizenPages.bookHref(d, sv.name), "err:Book an appointment at " + d.label + " first. The " + sv.name + " is made at the office.");
         return null;
@@ -108,6 +114,25 @@ final class Registry {
                 kind = "Vehicle";
                 detail = join(answer(a.id, s, "Make") + " " + answer(a.id, s, "Model") + " " + answer(a.id, s, "Year of manufacture"),
                         "registration " + answer(a.id, s, "Registration number (number plate)"));
+                break;
+            }
+            case "Roadworthy Certificate": {
+                String s = "The vehicle";
+                kind = "Roadworthy certificate";
+                status = "Valid";
+                detail = join(answer(a.id, s, "Registration number (number plate)") + " " + answer(a.id, s, "Make") + " " + answer(a.id, s, "Model"), "valid until " + LocalDate.now().plusYears(1));
+                break;
+            }
+            case "Learner's Licence": {
+                kind = "Learner's licence";
+                status = "Valid";
+                detail = join("Class: " + answer(a.id, "The licence you want", "Class of vehicle"), "valid until " + LocalDate.now().plusMonths(24));
+                break;
+            }
+            case "Driving Licence (new)": {
+                kind = "Driving licence";
+                status = "Valid";
+                detail = join("Licence DL" + (300000 + a.id), "class: " + answer(a.id, "Your learner's licence", "Class of vehicle"), "expires " + LocalDate.now().plusYears(5));
                 break;
             }
             case "Driving Licence Renewal": {

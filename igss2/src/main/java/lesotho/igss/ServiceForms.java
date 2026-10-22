@@ -140,6 +140,17 @@ final class ServiceForms {
                 residence("Where you live"));
 
         // ---------------------------------------------------------------- TRAFFIC (Learner's Licence and Driving Licence (new) were removed)
+        reg("Learner's Licence", "TR/LL-1", "Use this form to apply for a learner's licence. You must be 16 or older. After the learner's test, Traffic Services tells you the result and where to collect the licence.",
+                new Sec("The licence you want", sel("class", "Class of vehicle", true, LICENCE_CLASSES), selList("test_centre", "Where do you want to take the learner's test?", true, DISTRICTS),
+                        dtf("pref_date", "Preferred date for the test", false)),
+                licenceHealth(), residence("Where you live"));
+
+        reg("Driving Licence (new)", "TR/DL-1", "Use this form to apply for your first driving licence. You need an approved learner's licence. After the driving test, Traffic Services tells you the result and where to collect the licence.",
+                new Sec("Your learner's licence", txt("learner_no", "Learner's licence number", true), sel("class", "Class of vehicle", true, LICENCE_CLASSES)),
+                new Sec("The driving test", txt("school", "Driving school (if you went to one)", false), selList("test_centre", "Where do you want to take the driving test?", true, DISTRICTS),
+                        dtf("pref_date", "Preferred date for the test", false)),
+                residence("Where you live"));
+
         reg("Driving Licence Renewal", "TR/DL-2", "Use this form to renew a driving licence.",
                 new Sec("Your licence", txt("licence_no", "Licence number", true), dtf("expiry", "Date it expires", true), sel("class", "Class of vehicle", true, LICENCE_CLASSES)),
                 licenceHealth(), residence("Where you live"));
@@ -302,12 +313,12 @@ final class ServiceForms {
         label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:#1f2937;margin:8px 0 6px}
         label.f i{color:#c0262d;font-style:normal}
         input,select,textarea{width:100%;border:0;border-bottom:1.5px solid #1f2937;border-radius:0;padding:8px 4px;font:15px 'Segoe UI',Arial,sans-serif;background:#f8fafc;color:#0a2a8f}
-        input:focus,select:focus,textarea:focus{outline:2px solid #0b5ed7;background:#fff}
+        input:focus,select:focus,textarea:focus{outline:2px solid #1a4fb4;background:#fff}
         input[type=file]{padding:8px 4px;font-size:13px;background:#fff}
         small{color:#5f6f8c;font-size:11.5px;font-weight:400;line-height:1.35}
-        .btn{display:block;width:100%;border:0;border-radius:4px;background:#0b5ed7;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer;margin-top:6px}
-        .btn:hover{background:#0a53bd}
-        .sm{border:1.5px solid #0b5ed7;background:#fff;color:#0b5ed7;border-radius:18px;padding:8px 14px;font:700 13px 'Segoe UI',Arial,sans-serif;cursor:pointer;display:inline-block}
+        .btn{display:block;width:100%;border:0;border-radius:10px;background:#1a4fb4;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer;margin-top:6px}
+        .btn:hover{background:#143f91}
+        .sm{border:1.5px solid #1a4fb4;background:#fff;color:#1a4fb4;border-radius:18px;padding:8px 14px;font:700 13px 'Segoe UI',Arial,sans-serif;cursor:pointer;display:inline-block}
         .err,.ok{padding:10px 14px;font-size:13px;font-weight:700;margin:0 0 14px;border:2px solid}
         .ok{background:#e6f4ea;color:#14532d;border-color:#14532d}
         .err{background:#fff;color:#9b1c1c;border-color:#9b1c1c}
@@ -373,8 +384,30 @@ final class ServiceForms {
 
     // ------------------------------------------------------------------ the form
     /** Values the system already knows: the old passport on a renewal. */
-    private static String prefill(Citizen me, Policy.Service sv, String field) {
-        if (!sv.name.equals("Passport Renewal") && !sv.name.equals("Lost or Stolen Passport")) return "";
+    /** Details that do not change from one form to the next. They are filled in from the register or from the citizen's earlier forms. */
+    private static final java.util.Set<String> STABLE = java.util.Set.of("village", "chief", "district", "postal", "birth_place", "birth_district", "nationality", "marital",
+            "occupation", "mother_name", "mother_id", "mother_dob", "father_name", "father_id", "mother", "father", "chief_name", "chief_tel", "chief_area", "licence_no", "class",
+            "birth_village", "mother_nat", "father_nat");
+
+    private static String prefill(Citizen me, Policy.Service sv, Fld fld) {
+        String field = fld.name;
+        if (sv.name.equals("Passport Renewal") || sv.name.equals("Lost or Stolen Passport")) {
+            String v = passportPrefill(me, sv, field);
+            if (!v.isEmpty()) return v;
+        }
+        if (!STABLE.contains(field)) return "";
+        String v = null;
+        try {
+            v = Db.one("select a.value from form_answers a join applications p on p.id=a.app_id where p.citizen_id=? and a.label=? and a.value<>'' order by p.id desc, a.ord desc limit 1",
+                    rs -> rs.getString(1), me.id, fld.label);
+        } catch (RuntimeException e) { v = null; } // never stop a form from opening because a suggestion could not be read
+        if (v != null && (fld.opts.isEmpty() || fld.opts.contains(v))) return v;
+        if (field.equals("district") && me.address != null)
+            for (String d : DISTRICTS) if (me.address.toLowerCase().contains(d.toLowerCase())) return d;
+        return "";
+    }
+
+    private static String passportPrefill(Citizen me, Policy.Service sv, String field) {
         String[] p = Store.currentPassport(me.id);
         if (p == null) return "";
         switch (field) { case "old_no": return p[0]; case "old_issue": return sv.name.equals("Passport Renewal") ? p[1] : ""; case "old_expiry": return sv.name.equals("Passport Renewal") ? p[2] : ""; default: return ""; }
@@ -418,7 +451,7 @@ final class ServiceForms {
         for (Sec s : fm.secs) {
             sb.append("<div class='part'><h2>Part ").append(letter(part++)).append(" &ndash; ").append(Html.esc(s.title)).append("</h2><div class='pb'>");
             for (Fld f : s.fields) {
-                String val = r.p.containsKey(f.name) ? r.get(f.name) : prefill(me, sv, f.name);
+                String val = r.p.containsKey(f.name) ? r.get(f.name) : prefill(me, sv, f);
                 sb.append(f.type.equals("area") ? "<div class='full'>" + input(f, val) + "</div>" : input(f, val));
             }
             sb.append("</div></div>");
@@ -449,7 +482,7 @@ final class ServiceForms {
                 .append("</div></div></div>");
 
         sb.append("<div class='official'>FOR OFFICIAL USE ONLY<div></div><div></div></div>")
-                .append("<button class='btn noprint'>" + (sv.dept == lesotho.igss.Models.Dept.PO ? "Send report" : "Send application") + "</button></form></div>");
+                .append("<button class='btn noprint'>" + (sv.dept == lesotho.igss.Models.Dept.PO ? "Submit report" : "Submit application") + "</button></form></div>");
         Resp out = shell(sv.name, sb.toString(), photo);
         if (!errors.isEmpty()) out.code = 400;
         return out;

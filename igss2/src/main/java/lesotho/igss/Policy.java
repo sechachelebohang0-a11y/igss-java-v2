@@ -91,7 +91,7 @@ public final class Policy {
     }
 
     public static final List<String> DOC_TYPES = List.of("Passport photo", "National ID copy", "Birth certificate", "Proof of residence", "Marriage certificate",
-            "Medical certificate", "Vehicle papers", "Death notification", "Bank details", "Old passport");
+            "Medical certificate", "Vehicle papers", "Death notification", "Bank details", "Old passport", "Driving licence copy");
 
     public static final List<Service> ALL = new ArrayList<>();
 
@@ -110,12 +110,10 @@ public final class Policy {
         s(Dept.HA, "Death", "Death Registration", 0, "Register a death in the family.", "Death notification", "National ID copy");
         s(Dept.HA, "Personal records", "Change of Names", 120, "Change your legal names.", "National ID copy", "Birth certificate");
 
-        // Traffic: Learner's Licence and Driving Licence (new) were removed from the citizen dashboard.
-        s(Dept.TR, "Driving", "Driving Licence Renewal", 100, "Renew your driving licence.", "National ID copy", "Passport photo");
+        s(Dept.TR, "Driving", "Driving Licence Renewal", 100, "Renew your driving licence.", "National ID copy", "Driving licence copy", "Passport photo");
         s(Dept.TR, "Driving", "Licence Replacement", 90, "Replace a lost or damaged licence.", "National ID copy");
         s(Dept.TR, "Vehicles", "Vehicle Registration", 250, "Register a vehicle in your name.", "Vehicle papers", "National ID copy");
         s(Dept.TR, "Vehicles", "Change of Ownership", 150, "Change the owner of a vehicle.", "Vehicle papers");
-        s(Dept.TR, "Vehicles", "Roadworthy Certificate", 80, "Certificate that a vehicle is safe to drive.", "Vehicle papers");
         s(Dept.TR, "Permits", "D Permit (public transport)", 200, "Permit to carry passengers for payment.", "National ID copy", "Medical certificate");
 
 

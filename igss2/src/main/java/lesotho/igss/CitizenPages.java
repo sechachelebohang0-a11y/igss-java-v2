@@ -44,7 +44,7 @@ final class CitizenPages {
 
     static Resp landing(Req r) {
         String body = Html.intro("One ID. One Profile. All Services.")
-                + Html.tiles(List.of(new String[]{"/login", "user", "Citizen Login"}, new String[]{"/register", "id", "Create Account"}, new String[]{"/staff/login", "lock", "Department Official"}))
+                + Html.tiles(List.of(new String[]{"/login", "user", "Citizen Login"}, new String[]{"/register", "id", "Sign Up"}, new String[]{"/staff/login", "lock", "Department Official"}))
                 + Html.label("");
         return Resp.html(Html.page("Integrated Government Services", null, null, body));
     }
@@ -82,7 +82,7 @@ final class CitizenPages {
             Citizen c = Store.citizen(idv);
             if (idv.isEmpty()) idErr = "Enter your ID number.";
             else if (c == null) idErr = "Couldn't find that ID number. Check it and try again.";
-            else if (!c.hasAccount()) idErr = "This ID number has no account yet. Go back and tap Create Account.";
+            else if (!c.hasAccount()) idErr = "This ID number has no account yet. Go back and tap Sign Up.";
             else if (pw.isEmpty()) pwErr = "Enter your password.";
             else if (!Store.hash(c.salt, pw).equals(c.hash)) pwErr = "Wrong password. Try again.";
             else {
@@ -182,15 +182,70 @@ final class CitizenPages {
         return Resp.html(Html.page("My Photo", B, "/home", body));
     }
 
+    /** What Finance holds for this citizen: fees paid, grant and pension payments, and tax held back for LRA. */
+    private static String financeMine(Citizen me) {
+        StringBuilder sb = new StringBuilder();
+        int owed = Store.taxOwed(me.id);
+        sb.append(Html.label("MY TAX STANDING (FROM LRA)")).append(Html.card(owed <= 0 ? "<b>No tax owed</b><span class='mu'>Nothing is taken from your grant or pension.</span>"
+                : "<b>M " + owed + " owed to LRA</b><span class='mu'>This is taken from your next grant or pension payment and sent to LRA. Finance does not collect tax itself.</span>"));
+        sb.append(Html.label("MY GRANT AND PENSION PAYMENTS"));
+        int n = 0;
+        for (Models.Payment p : Store.benefitPaymentsOf(me.id)) {
+            n++;
+            sb.append(Html.row(Policy.benefitLabel(p.kind) + " · " + p.month, "M " + p.amount + (p.paid && p.receipt != null ? " · receipt " + p.receipt : ""), Html.pill(p.paid ? "Paid" : "Pending"), null));
+        }
+        if (n == 0) sb.append(Html.mu("No payments yet."));
+        List<String[]> lra = Store.lraOf(me.id);
+        if (!lra.isEmpty()) {
+            sb.append(Html.label("TAX TAKEN AND SENT TO LRA"));
+            for (String[] t : lra) sb.append(Html.row("M " + t[0], t[1], "", null));
+        }
+        sb.append(Html.label("MY FEE PAYMENTS (RECEIPTS)"));
+        int f = 0;
+        for (Models.Payment p : Store.paymentsOf(me.id)) {
+            if (!p.kind.equals("FEE") || !p.paid) continue;
+            f++;
+            sb.append(Html.row(p.ref == null ? "Service fee" : p.ref, "M " + p.amount + (p.receipt != null ? " · receipt " + p.receipt : ""), Html.pill("Paid"), null));
+        }
+        if (f == 0) sb.append(Html.mu("No fees paid yet."));
+        return sb.toString();
+    }
+
+    /** My driving licence, vehicles, roadworthy certificates and traffic fines. */
+    private static String trafficMine(Citizen me) {
+        StringBuilder sb = new StringBuilder();
+        List<Models.TrafficRec> recs = Store.trafficOf(me.id);
+        List<String[]> certs = Certificates.of(me.id);
+        sb.append(Html.label("MY CERTIFICATES AND LICENCES"));
+        for (String[] c : certs) sb.append(Html.row(c[2] + " · " + c[3], (Certificates.valid(c) ? "Valid until " : "Expired on ") + c[6], Html.pill(Certificates.valid(c) ? "Valid" : "Expired"), "/certificate?id=" + c[0]));
+        if (certs.isEmpty()) sb.append(Html.mu("You have none yet. Pass a test or an inspection and it appears here."));
+        sb.append(Html.label("MY LICENCE, VEHICLES AND CERTIFICATES"));
+        for (Models.TrafficRec t : recs) sb.append(Html.row(t.kind, t.detail, Html.pill(t.status), null));
+        if (recs.isEmpty()) sb.append(Html.mu("Nothing on the traffic register yet."));
+        List<String[]> fines = Store.finesOf(me.id);
+        if (!fines.isEmpty()) {
+            sb.append(Html.label("MY TRAFFIC FINES (PAY AT THE TRAFFIC OFFICE)"));
+            for (String[] f : fines) sb.append(Html.row(f[2], "M " + f[3] + " · " + f[4] + " · " + f[5] + (f[8] == null || f[8].isEmpty() ? "" : " · receipt " + f[8]), Html.pill(f[7]), null));
+        }
+        return sb.toString();
+    }
+
     static Resp services(Req r) {
         Citizen me = r.citizen();
         if (me == null) return needLogin();
         Models.Dept d = dept(r.get("dept"));
         StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("Pick a service. Your details are filled in for you."));
         if (d == Models.Dept.FI) sb.append(Html.card("<b>Finance Services</b><span class='mu'>" + Html.esc(Policy.FINANCE_NOTE) + "</span>"));
+        if (d == Models.Dept.FI) sb.append(financeMine(me));
+        if (d == Models.Dept.TR) sb.append(trafficMine(me));
         if (d == Models.Dept.PE) sb.append(Html.card("<b>How pensions work</b><span class='mu'>" + Html.esc(Policy.PENSION_RULE) + "</span>"));
-        if (d == Models.Dept.HA) sb.append(bookLink(d, "Make a national ID card", "Book an appointment to make an ID"));
-        if (d == Models.Dept.TR) sb.append(bookLink(d, "Make a driving licence", "Book an appointment to make a driving licence"));
+        if (d == Models.Dept.HA) sb.append(bookLink(d, "Fingerprints for my ID card", "Book an appointment to give fingerprints for my ID card"));
+        if (d == Models.Dept.TR) {
+            sb.append(Html.card("<b>Tests and certificates</b><span class='mu'>Book a test or an inspection and come to the Traffic office. When you pass, Traffic Services issues your learner's licence, driving licence or roadworthy certificate. You get it here and can print it.</span>"));
+            sb.append(bookLink(d, "Learner's licence test", "Book a learner's licence test"));
+            sb.append(bookLink(d, "Driving test", "Book a driving test"));
+            sb.append(bookLink(d, "Roadworthy inspection", "Book a roadworthy inspection for my vehicle"));
+        }
         sb.append(bookLink(d, "", "Book an appointment or join the queue at " + d.label));
         String cat = "";
         for (Policy.Service s : Policy.of(d)) {
@@ -450,7 +505,14 @@ final class CitizenPages {
     }
 
     // ------------------------------------------------------------------ appointments and queue
+    /** When the citizen came from one department's page, the department is fixed. From the main menu they can choose. */
     private static String deptSelect(String selected) {
+        boolean fixed = false;
+        for (Models.Dept d : Models.Dept.values()) if (d.name().equals(selected)) fixed = true;
+        if (fixed) {
+            Models.Dept d = Models.Dept.valueOf(selected);
+            return "<label class='f'>Department<input type='text' value='" + Html.esc(d.label) + "' readonly style='background:#eef2fa'></label><input type='hidden' name='dept' value='" + d.name() + "'>";
+        }
         StringBuilder o = new StringBuilder("<label class='f'>Department<select name='dept'>");
         for (Models.Dept d : Models.Dept.values())
             o.append("<option value='").append(d.name()).append("'").append(d.name().equals(selected) ? " selected" : "").append(">").append(Html.esc(d.label)).append("</option>");
@@ -458,14 +520,40 @@ final class CitizenPages {
     }
 
     /** A service box with ideas to pick from, and room to type anything else. */
-    private static String serviceBox(String value) {
-        return "<label class='f'>Service<input name='service' list='svc' value='" + Html.esc(value) + "' maxlength='80' autocomplete='off' placeholder='Pick an idea or type your own'></label>";
+    /** The things a citizen can book or queue for at one department. Only this department's own services. */
+    static List<String> bookable(Models.Dept d) {
+        List<String> l = new ArrayList<>();
+        switch (d) {
+            case HA: l.add("Fingerprints for my ID card"); l.add("Collect a document"); break;
+            case TR: l.add("Learner's licence test"); l.add("Driving test"); l.add("Roadworthy inspection"); l.add("Collect a document"); break;
+            case FI: l.add("Payment enquiry"); break;
+            case PE: l.add("Pension enquiry"); break;
+            case PA: l.add("Collect a document"); break;
+            default: break;
+        }
+        for (Policy.Service s : Policy.of(d)) if (!l.contains(s.name)) l.add(s.name);
+        l.add("General enquiry");
+        return l;
     }
-
-    private static String serviceList() {
-        StringBuilder o = new StringBuilder("<datalist id='svc'>");
-        for (String s : SERVICE_IDEAS) o.append("<option value='").append(Html.esc(s)).append("'>");
-        return o.append("</datalist>").toString();
+    private static String serviceBox(Models.Dept d, String value) {
+        StringBuilder o = new StringBuilder("<label class='f'>Service<select name='service'>");
+        List<String> l = bookable(d);
+        for (String s : l) o.append("<option value='").append(Html.esc(s)).append("'").append(s.equals(value) ? " selected" : "").append(">").append(Html.esc(s)).append("</option>");
+        return o.append("</select></label>").toString();
+    }
+    /** Changes the Service list when the Department changes, so each department shows only its own things. */
+    private static String serviceScript() {
+        StringBuilder j = new StringBuilder("{");
+        for (Models.Dept d : Models.Dept.values()) {
+            if (j.length() > 1) j.append(",");
+            j.append("\"").append(d.name()).append("\":[");
+            boolean first = true;
+            for (String s : bookable(d)) { j.append(first ? "" : ",").append("\"").append(s.replace("\\", "").replace("\"", "")).append("\""); first = false; }
+            j.append("]");
+        }
+        j.append("}");
+        return "<script>(function(){var S=" + j + ";document.querySelectorAll('select[name=dept]').forEach(function(ds){var f=ds.form;if(!f)return;var ss=f.querySelector('select[name=service]');if(!ss)return;"
+                + "ds.addEventListener('change',function(){ss.innerHTML='';(S[ds.value]||[]).forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n;ss.appendChild(o);});});});})();</script>";
     }
 
     static Resp book(Req r) {
@@ -488,6 +576,7 @@ final class CitizenPages {
             if (service.isEmpty()) service = "General enquiry";
             if (service.length() > 80) service = service.substring(0, 80);
             String back = bookHref(d, service);
+            if (!act.equals("cancel") && !bookable(d).contains(service)) return Resp.to(bookHref(d, ""), "err:Choose a service from the list for " + d.label + ".");
 
             if (act.equals("queue")) {
                 for (Ticket t : Store.waiting(d))
@@ -518,16 +607,15 @@ final class CitizenPages {
         for (LocalTime t : SLOTS) timeOpts.append("<option value='").append(t).append("'>").append(t).append("</option>");
 
         StringBuilder sb = new StringBuilder(Html.banner(r.get("m"))
-                + Html.intro("Choose how you want to be served: join the line now, or book a time and skip the wait. To make an ID or a driving licence, book an appointment first.")
-                + serviceList());
+                + Html.intro("Choose how you want to be served: join the line now, or book a time and skip the wait. For a test or an inspection, book an appointment."));
 
         sb.append(Html.label("JOIN THE QUEUE NOW")).append(Html.card(
                 Html.mu("You get a queue number. Come to the office and wait for your number to be called.")
-                        + Html.form("/book", Html.hidden("act", "queue") + deptSelect(selDept) + serviceBox(svc) + "<br>" + Html.button("Get my queue number"))));
+                        + Html.form("/book", Html.hidden("act", "queue") + deptSelect(selDept) + serviceBox(dept(selDept), svc) + "<br>" + Html.button("Get my queue number"))));
 
         sb.append(Html.label("BOOK A TIME")).append(Html.card(
                 Html.mu("Offices are open Monday to Friday, 08:00 to 16:00.")
-                        + Html.form("/book", Html.hidden("act", "book") + deptSelect(selDept) + serviceBox(svc)
+                        + Html.form("/book", Html.hidden("act", "book") + deptSelect(selDept) + serviceBox(dept(selDept), svc)
                         + "<label class='f'>Date<input type='date' name='date' min='" + today + "' max='" + today.plusDays(60) + "' required></label>"
                         + "<label class='f'>Time<select name='time'>" + timeOpts + "</select></label>"
                         + "<br>" + Html.button("Book appointment"))));
@@ -548,6 +636,7 @@ final class CitizenPages {
         List<Ticket> tickets = Store.ticketsOf(me.id);
         for (Ticket t : tickets) sb.append(Html.row(t.number, t.dept.label + " · " + t.service, Html.pill(t.served ? "Completed" : "Pending"), null));
         if (tickets.isEmpty()) sb.append(Html.mu("No queue numbers yet."));
+        sb.append(serviceScript());
         return Resp.html(Html.page("Appointments & Queue", B, "/home", sb.toString()));
     }
 

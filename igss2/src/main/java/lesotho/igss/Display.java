@@ -246,7 +246,7 @@ final class Display {
         d("Applicant", "Moapari"); d("Declaration", "Boitlamo"); d("Documents to attach", "Litokomane tse tla kenngoa"); d("Photograph", "Foto");
         d("Where you live", "Moo u lulang"); d("Village / Town", "Motse / Toropo"); d("Chief / Ward / Area", "Morena / Moaparo / Sebaka");
         d("District", "Setereke"); d("Postal address (P.O. Box)", "Aterese ea poso (P.O. Box)");
-        d("Please fix the following:", "Ka kopo lokisa tse latelang:"); d("Send application", "Romela kopo"); d("Submit application", "Romela kopo");
+        d("Please fix the following:", "Ka kopo lokisa tse latelang:"); d("Send application", "Romela kopo"); d("Submit report", "Romela tlaleho"); d("Submit application", "Romela kopo");
         d("I agree with the declaration above.", "Ke lumellana le boitlamo bo ka holimo.");
         d("I declare that everything on this form is true and complete. I know that false information can lead to this application being turned down.",
                 "Ke bolela hore tsohle foromong ena ke 'nete 'me lia phethahala. Ke tseba hore tlhahisoleseling ea bohata e ka etsa hore kopo ena e hanoe.");

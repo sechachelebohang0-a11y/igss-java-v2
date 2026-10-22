@@ -72,7 +72,10 @@ final class PublicApply {
     private static final class Sec {
         final String title;
         final List<Fld> fields;
+        String who; // null = always shown; "self" / "child" = only for that choice; "any" = once a choice is made
         Sec(String title, Fld... fields) { this.title = title; this.fields = List.of(fields); }
+        Sec who(String w) { this.who = w; return this; }
+        boolean shownFor(String choice) { return who == null || (!choice.isEmpty() && (who.equals("any") || who.equals(choice))); }
     }
 
     /** An optional or required file upload. reqFor: null = optional, "*" = always, otherwise the service it is required for. */
@@ -133,12 +136,21 @@ final class PublicApply {
                         new Slot("d_parent", "Parent's or guardian's ID copy", "Optional. JPG, PNG or PDF.", null))));
 
         FORMS.put("birth", new Form("birth", "/public/birth", "Birth Certificate Application",
-                "To apply for a birth certificate for a child. The person applying (the informant) is usually a parent.", "Birth Registration", "BRG", false,
-                List.of("child_first", "child_surname"), List.of("inf_name"), "inf_id", "inf_phone",
+                "To apply for a birth certificate. First choose whose birth certificate it is. The form then shows only what is needed for that person.", "Birth Registration", "BRG", false,
+                List.of("child_first", "child_surname", "self_first", "self_surname"), List.of("inf_name"), "inf_id", "inf_phone",
                 List.of(
                         new Sec("Who is the certificate for?",
                                 sel("for_whom", "Whose birth certificate is this?", true, "My own birth certificate", "My child's birth certificate")),
-                        new Sec("The person who was born (you, or your child)",
+                        new Sec("Your birth details",
+                                f("self_first", "First names", "text", true),
+                                f("self_surname", "Surname", "text", true),
+                                sel("self_sex", "Sex", true, "Male", "Female"),
+                                f("self_dob", "Date of birth", "date", true),
+                                f("self_time", "Time of birth", "time", false, "If you know it"),
+                                sel("self_place_type", "Where were you born?", true, "Hospital", "Clinic", "Home", "Other"),
+                                f("self_place_name", "Name of the hospital, clinic or village", "text", true),
+                                selList("self_district_birth", "District of birth", true, DISTRICTS)).who("self"),
+                        new Sec("The child",
                                 f("child_first", "First names", "text", true),
                                 f("child_surname", "Surname", "text", true),
                                 sel("child_sex", "Sex", true, "Male", "Female"),
@@ -146,26 +158,31 @@ final class PublicApply {
                                 f("child_time", "Time of birth", "time", false, "If you know it"),
                                 sel("place_type", "Where was the child born?", true, "Hospital", "Clinic", "Home", "Other"),
                                 f("place_name", "Name of the hospital, clinic or village", "text", true),
-                                selList("birth_district", "District of birth", true, DISTRICTS)),
+                                selList("birth_district", "District of birth", true, DISTRICTS)).who("child"),
                         new Sec("The mother",
                                 f("mother_name", "Full name", "text", true),
                                 f("mother_maiden", "Maiden surname", "text", false),
                                 f("mother_id", "ID number", "idnum", false),
                                 f("mother_dob", "Date of birth", "date", false),
                                 fd("mother_nat", "Nationality", "text", false, "Mosotho"),
-                                sel("mother_marital", "Marital status", false, marital.toArray(new String[0]))),
+                                sel("mother_marital", "Marital status", false, marital.toArray(new String[0]))).who("any"),
                         new Sec("The father",
                                 f("father_name", "Full name", "text", false),
                                 f("father_id", "ID number", "idnum", false),
-                                fd("father_nat", "Nationality", "text", false, "Mosotho")),
+                                fd("father_nat", "Nationality", "text", false, "Mosotho")).who("any"),
+                        new Sec("Your contact details",
+                                f("self_phone", "Your phone number", "tel", true),
+                                f("self_email", "Your email", "email", false),
+                                f("self_village", "Your village or town", "text", true),
+                                selList("self_district", "Your district", true, DISTRICTS)).who("self"),
                         new Sec("The person applying (informant)",
                                 f("inf_name", "Your full name", "text", true),
-                                sel("inf_rel", "Your relationship to the person who was born", true, "Myself", "Mother", "Father", "Grandparent", "Guardian", "Other"),
-                                f("inf_id", "Your ID number", "idnum", false, "Needed when you apply for your child. Leave empty if this is your own first birth certificate."),
+                                sel("inf_rel", "Your relationship to the child", true, "Mother", "Father", "Grandparent", "Guardian", "Other"),
+                                f("inf_id", "Your ID number", "idnum", true),
                                 f("inf_phone", "Your phone number", "tel", true),
                                 f("inf_email", "Your email", "email", false),
                                 f("inf_village", "Your village or town", "text", true),
-                                selList("inf_district", "Your district", true, DISTRICTS))),
+                                selList("inf_district", "Your district", true, DISTRICTS)).who("child")),
                 List.of(
                         new Slot("d_notif", "Birth notification from the hospital or clinic", "Optional. JPG, PNG or PDF.", null),
                         new Slot("d_chief", "Letter from the chief (Informant)", "Optional. JPG, PNG or PDF.", null),
@@ -249,26 +266,28 @@ final class PublicApply {
         *{box-sizing:border-box}
         [hidden]{display:none!important}
         html,body{margin:0}
-        body{background:#dfe6ee;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#475569}
+        body{background:#dfe6ee;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#1f2937}
         a{text-decoration:none;color:inherit}
         .phone{max-width:480px;margin:0 auto;min-height:100vh;background:#eef7ff;padding:20px 22px 30px}
         .top a{color:#00209f;font-weight:800;font-size:14px;display:inline-block;padding:4px 0}
         h2.t{color:#00209f;font-size:20px;margin:10px 0 4px}
         p.in{font-size:13.5px;margin:0 0 16px;line-height:1.4}
-        fieldset{border:1px solid #c9d6f0;background:#fff;border-radius:12px;padding:4px 14px 4px;margin:0 0 16px}
-        legend{color:#00209f;font-weight:800;font-size:13px;padding:0 6px}
-        label.f{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:#33466e;margin:10px 0 12px}
+        fieldset{border:1.5px solid #1f2937;background:#fff;border-radius:0;padding:0 12px 6px;margin:0 0 14px;min-width:0}
+        legend{float:left;width:calc(100% + 24px);margin:0 -12px 6px;background:#e8edf7;border-bottom:1.5px solid #1f2937;padding:6px 10px;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:#00209f;font-weight:800}
+        legend+*{clear:both}
+        label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:#1f2937;margin:8px 0 6px}
         label.f i{color:#c0262d;font-style:normal}
-        input,select,textarea{width:100%;border:1.5px solid #c9d6f0;border-radius:10px;padding:11px;font:15px 'Segoe UI',Arial,sans-serif;background:#fff;color:#0a2a8f}
-        input[type=file]{padding:9px;font-size:13px}
+        input,select,textarea{width:100%;border:0;border-bottom:1.5px solid #1f2937;border-radius:0;padding:8px 4px;font:15px 'Segoe UI',Arial,sans-serif;background:#f8fafc;color:#0a2a8f}
+        input:focus,select:focus,textarea:focus{outline:2px solid #1a4fb4;background:#fff}
+        input[type=file]{padding:8px 4px;font-size:13px;background:#fff}
         small{color:#5f6f8c;font-size:11.5px;font-weight:400;line-height:1.35}
-        .btn{display:block;width:100%;border:0;border-radius:8px;background:#0b5ed7;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer;margin-top:6px}
-        .btn:hover{background:#0a53bd}
-        .sm{border:1.5px solid #0b5ed7;background:#fff;color:#0b5ed7;border-radius:18px;padding:8px 14px;font:700 13px 'Segoe UI',Arial,sans-serif;cursor:pointer;display:inline-block}
+        .btn{display:block;width:100%;border:0;border-radius:10px;background:#1a4fb4;color:#fff;font:700 15px 'Segoe UI',Arial,sans-serif;padding:15px;text-align:center;cursor:pointer;margin-top:6px}
+        .btn:hover{background:#143f91}
+        .sm{border:1.5px solid #1a4fb4;background:#fff;color:#1a4fb4;border-radius:18px;padding:8px 14px;font:700 13px 'Segoe UI',Arial,sans-serif;cursor:pointer;display:inline-block}
         .sm:hover{background:#eef4ff}
         .err,.ok{border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;margin:0 0 14px}
-        .ok{background:#dbe6fb;color:#0a2a8f}
-        .err{background:#fff;color:#1a4fb4;border:2px solid #1a4fb4}
+        .ok{background:#e6f4ea;color:#14532d;border:2px solid #14532d}
+        .err{background:#fff;color:#9b1c1c;border:2px solid #9b1c1c}
         .err ul{margin:6px 0 0;padding-left:18px;font-weight:600}
         .hp{position:absolute;left:-9999px;top:-9999px;height:0;overflow:hidden}
         .chk{display:flex;gap:10px;align-items:flex-start;font-size:13px;margin:6px 0 16px;color:#33466e}
@@ -283,7 +302,7 @@ final class PublicApply {
         .tile small{display:block;margin-top:4px;font-size:12px}
         .card{background:#fff;border:1px solid #c9d6f0;border-radius:12px;padding:14px;margin-bottom:14px}
         .big{font-size:24px;font-weight:800;color:#00209f;letter-spacing:.05em;margin:2px 0 10px}
-        .pill{display:inline-block;border-radius:20px;padding:4px 12px;background:#0b5ed7;color:#fff;font-size:12px;font-weight:700}
+        .pill{display:inline-block;border-radius:20px;padding:4px 12px;background:#1a4fb4;color:#fff;font-size:12px;font-weight:700}
         .foot{text-align:center;color:#00209f;font-weight:700;font-size:11.5px;margin:22px 0 2px}
         @media print{.noprint{display:none!important}body{background:#fff}.phone{background:#fff}}
         """;
@@ -475,7 +494,7 @@ final class PublicApply {
         }
         sb.append("<form id='appform' method='post' action='").append(fm.path).append("' enctype='multipart/form-data' autocomplete='off'>");
         for (Sec s : fm.secs) {
-            sb.append("<fieldset><legend>").append(Html.esc(s.title)).append("</legend>");
+            sb.append("<fieldset").append(s.who != null ? " data-who='" + s.who + "'" : "").append("><legend>").append(Html.esc(s.title)).append("</legend>");
             for (Fld f : s.fields) sb.append(input(f, r.p.containsKey(f.name) ? r.get(f.name) : ""));
             sb.append("</fieldset>");
         }
@@ -491,10 +510,21 @@ final class PublicApply {
                 + "I understand that false information can lead to my application being rejected.</span></label>");
         sb.append("<div class='hp' aria-hidden='true'><label>Leave this empty<input name='website' tabindex='-1' autocomplete='off'></label></div>");
         sb.append("<button class='btn'>Submit application</button></form>");
+        if (fm.key.equals("birth")) sb.append(WHO_JS);
         Resp out = shell(fm.title, sb.toString(), fm.photo);
         if (!errors.isEmpty()) out.code = 400;
         return out;
     }
+
+    /** Shows only the parts of the birth form that belong to the person chosen in "Whose birth certificate is this?". */
+    private static final String WHO_JS = """
+            <style>fieldset[data-who][disabled]{display:none}</style>
+            <script>(function(){var sel=document.querySelector('[name=for_whom]');if(!sel)return;
+            function apply(){var c=sel.value.indexOf('My own')===0?'self':sel.value.indexOf('My child')===0?'child':'';
+              document.querySelectorAll('fieldset[data-who]').forEach(function(fs){var w=fs.getAttribute('data-who');
+                fs.disabled=!(c&&(w==='any'||w===c));});}
+            sel.addEventListener('change',apply);apply();})();</script>
+            """;
 
     /** GET shows the form, POST checks it and saves the application. */
     static Resp form(Req r, String key) {
@@ -517,8 +547,10 @@ final class PublicApply {
 
         Map<String, String> vals = new LinkedHashMap<>();
         List<String> errs = new ArrayList<>();
+        String choice = !fm.key.equals("birth") ? "" : r.get("for_whom").startsWith("My own") ? "self" : r.get("for_whom").startsWith("My child") ? "child" : "";
         for (Sec s : fm.secs)
             for (Fld f : s.fields) {
+                if (!s.shownFor(choice)) { r.p.put(f.name, ""); vals.put(f.name, ""); continue; } // a part of the form that was not shown
                 String v = clean(r.get(f.name), f.type.equals("area"));
                 r.p.put(f.name, v);
                 vals.put(f.name, v);
@@ -533,13 +565,6 @@ final class PublicApply {
             if (!first && vals.get("existing_id").isEmpty()) errs.add("Existing ID number is required for a replacement or renewal.");
             LocalDate dob = date(vals.get("dob"));
             if (dob != null && Period.between(dob, LocalDate.now()).getYears() < 16) errs.add("A national ID card is for people aged 16 or older.");
-        }
-
-        if (fm.key.equals("birth")) {
-            boolean own = vals.get("for_whom").startsWith("My own");
-            if (own && !vals.get("inf_rel").equals("Myself")) errs.add("This is your own birth certificate. Choose Myself as your relationship.");
-            if (!own && vals.get("inf_rel").equals("Myself")) errs.add("This is for your child. Choose your relationship to the child (for example Mother or Father).");
-            if (!own && vals.get("inf_id").isEmpty()) errs.add("Your ID number is required when you apply for your child.");
         }
 
         Map<String, Part> up = new LinkedHashMap<>();
@@ -584,7 +609,7 @@ final class PublicApply {
         String code = newCode();
         String idNumber = fm.idKey == null ? "" : vals.getOrDefault(fm.idKey, "").replace(" ", "").replace("-", "");
         int id = Db.insert("insert into public_apps(ref,code,service,form,name,id_number,id_name,phone,status,note,fee,created) values(?,?,?,?,?,?,?,?,?,?,?,?)",
-                "", code, service, fm.key, join(vals, fm.nameKeys), idNumber, join(vals, fm.idNameKeys), vals.getOrDefault(fm.phoneKey, ""),
+                "", code, service, fm.key, join(vals, fm.nameKeys), idNumber, join(vals, fm.idNameKeys), vals.getOrDefault(fm.phoneKey, "").isEmpty() ? vals.getOrDefault("self_phone", "") : vals.getOrDefault(fm.phoneKey, ""),
                 "RECEIVED", "", sv == null ? 0 : sv.fee, LocalDateTime.now());
         String ref = fm.prefix + "-" + LocalDate.now().getYear() + "-" + String.format("%04d", id);
         Db.exec("update public_apps set ref=? where id=?", ref, id);
@@ -615,8 +640,8 @@ final class PublicApply {
                         + "</small></div>"
                         + "<p class='in'>Home Affairs will check your details against the national register. Use <b>Check my application</b> to see the result.</p>"
                         + "<div class='noprint'><button class='btn' onclick='window.print()'>Print this page</button>"
-                        + "<a class='btn' style='background:#fff;color:#0b5ed7;border:1.5px solid #0b5ed7' href='/public/track'>Check my application</a>"
-                        + "<a class='btn' style='background:#fff;color:#0b5ed7;border:1.5px solid #0b5ed7' href='/'>Home</a></div>", false);
+                        + "<a class='btn' style='background:#fff;color:#1a4fb4;border:1.5px solid #1a4fb4' href='/public/track'>Check my application</a>"
+                        + "<a class='btn' style='background:#fff;color:#1a4fb4;border:1.5px solid #1a4fb4' href='/'>Home</a></div>", false);
     }
 
     static Resp track(Req r) {
