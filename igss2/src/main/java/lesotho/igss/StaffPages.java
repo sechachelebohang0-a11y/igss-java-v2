@@ -270,7 +270,7 @@ final class StaffPages {
                 c.name = full;
                 extra += " Name changed from " + oldName + " to " + full + ".";
                 String msg = "Name change for ID " + c.id + ": " + oldName + " is now " + full + ". Home Affairs approved it.";
-                for (Dept cd : Store.connectedDepts(c.id)) Store.noticeDept(cd, c.id, msg);
+                for (java.util.Map.Entry<Dept, String> cd : Store.connectedDepts(c.id).entrySet()) Store.noticeDept(cd.getKey(), c.id, msg + " You are told because you hold: " + cd.getValue() + ".");
                 Store.notify(c.id, "Your name is now " + full + " in every Home Affairs service. We told the departments you are connected to.");
             }
         }
@@ -357,9 +357,21 @@ final class StaffPages {
         if (bad != null) return bad;
         LocalDate today = LocalDate.now();
         YearMonth ym = YearMonth.from(today);
+        if (r.post() && r.get("act").equals("runall")) {
+            int inv = Registry.inviteNewPensioners(), sent = Registry.sendMonthlyBenefits();
+            return Resp.to("/staff/pension", "ok:" + sent + " payment" + (sent == 1 ? "" : "s") + " sent to Finance for " + ym + ". " + inv + " citizen" + (inv == 1 ? "" : "s") + " told they can now apply.");
+        }
         if (r.post()) {
             Citizen c = Store.citizen(r.get("id"));
             if (c == null) return Resp.to("/staff/pension", "err:Citizen not found.");
+            if (r.get("act").equals("reset")) {
+                if (!Store.govtWorker(c.id) || Store.benefitChoice(c.id) == null) return Resp.to("/staff/pension", "err:This person has no choice to reset.");
+                String why = Store.resetChoice(c.id);
+                if (why != null) return Resp.to("/staff/pension", "err:" + why);
+                Store.logAccess(c.id, o.dept, o.name, "Grant or pension choice", "Choice reset by Pensions");
+                Store.notify(c.id, "Pensions cleared your choice between the old-age grant and the retirement pension. Open My Pension and choose again. You cannot receive both.");
+                return Resp.to("/staff/pension", "ok:The choice of " + c.name + " was cleared. They were told to choose again.");
+            }
             String kind = r.get("benefit").equals("PENSION") ? "PENSION" : "GRANT";
             if (r.get("act").equals("invite")) {
                 if (!Policy.pensionAge(c, today) || !c.alive) return Resp.to("/staff/pension", "err:Not eligible.");
@@ -376,6 +388,8 @@ final class StaffPages {
         }
         StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("Payday: " + Policy.payday(ym) + ". Nobody has to queue.")
                 + Html.card("<b>How benefits work</b><span class='mu'>" + Html.esc(Policy.PENSION_RULE) + "</span>"));
+        sb.append(Html.card("<b>Automatic payments</b><span class='mu'>Every month the system sends the grant and pension payments to Finance by itself, and tells citizens when they reach " + Policy.PENSION_AGE + ". You can also run it now.</span>"
+                + Html.form("/staff/pension", Html.hidden("act", "runall") + "<button class='sm' data-confirm='Send the monthly payments to Finance now?'>Run monthly payments now</button>")));
         for (String kind : new String[]{"GRANT", "PENSION"}) {
             sb.append(Html.label(Policy.benefitLabel(kind).toUpperCase() + " REGISTER (M " + Policy.benefitAmount(kind) + " A MONTH)"));
             List<Citizen> reg = kind.equals("GRANT") ? Store.enrolledList() : Store.pensionList();
@@ -399,7 +413,8 @@ final class StaffPages {
             if (!c.alive || !Policy.pensionAge(c, today)) continue;
             gw++;
             String ch = Store.benefitChoice(c.id);
-            sb.append(Html.rowAv(av(o, c, 40), c.name, "Age " + Policy.age(c, today) + " · " + Store.govtMinistry(c.id), Html.pill(ch == null ? "Pending" : Policy.benefitLabel(ch)), null));
+            sb.append(Html.rowAv(av(o, c, 40), c.name, "Age " + Policy.age(c, today) + " · " + Store.govtMinistry(c.id), Html.pill(ch == null ? "Pending" : Policy.benefitLabel(ch))
+                    + (ch == null ? "" : Html.form("/staff/pension", Html.hidden("id", c.id) + Html.hidden("act", "reset") + "<button class='sm' data-confirm='Clear the choice of this person? They must choose again, and any unpaid payments are cancelled.'>Reset choice</button>")), null));
         }
         if (gw == 0) sb.append(Html.mu("None."));
         sb.append(Html.label("AGE " + Policy.PENSION_AGE + "+ BUT NOT YET APPLIED"));
@@ -434,8 +449,8 @@ final class StaffPages {
             if (held > 0) { Store.setTaxOwed(p.citizenId, owed - held); Store.lraTransfer(p.citizenId, held, Policy.benefitLabel(p.kind) + " " + p.month); }
             Store.markPaid(p.id, receipt);
             Store.notify(p.citizenId, "Your " + Policy.benefitLabel(p.kind).toLowerCase() + " payment of M " + p.amount + " for " + p.month + " has been paid. Receipt " + receipt + "."
-                    + (held > 0 ? " LRA says you owe tax. M " + held + " was taken and sent to LRA. You receive M " + (p.amount - held) + "." : ""));
-            return Resp.to("/staff/payments", "ok:Marked as paid and the citizen was notified." + (held > 0 ? " M " + held + " was held back and sent to LRA for unpaid tax." : ""));
+                    + (held > 0 ? " SRL says you owe tax. M " + held + " was taken and sent to SRL. You receive M " + (p.amount - held) + "." : ""));
+            return Resp.to("/staff/payments", "ok:Marked as paid and the citizen was notified." + (held > 0 ? " M " + held + " was held back and sent to SRL for unpaid tax." : ""));
         }
         StringBuilder sb = new StringBuilder(Html.banner(r.get("m")) + Html.intro("Grant and pension payments sent by Pensions. Before paying, Finance checks with Home Affairs that the person is alive, and checks their employment: a government employee gets only the benefit they chose."));
         List<Payment> l = Store.benefitPayments();
@@ -443,7 +458,7 @@ final class StaffPages {
             Citizen c = Store.citizen(p.citizenId);
             String why = p.paid ? null : Store.benefitProblem(c, p.kind);
             boolean stopped = why != null;
-            String act = p.paid || stopped ? "" : Html.form("/staff/payments", Html.hidden("id", String.valueOf(p.id)) + "<button class='sm'>Mark paid</button>");
+            String act = p.paid || stopped ? "" : Html.form("/staff/payments", Html.hidden("id", String.valueOf(p.id)) + "<button class='sm' data-confirm='Mark this as paid? The citizen is told.'>Mark paid</button>");
             sb.append("<div class='rw'>").append(av(o, c, 40)).append("<div><b>").append(Html.esc(c.name)).append("</b><small>ID ").append(c.id).append(" · ").append(Html.esc(Policy.benefitLabel(p.kind))).append(" · M ").append(p.amount).append(" · ").append(p.month)
                     .append("<br>Home Affairs says: ").append(c.alive ? "alive" : "deceased").append(" · Pensions says employment: ").append(Store.govtWorker(c.id) ? "government" + (Store.benefitChoice(c.id) == null ? " (no choice yet)" : ", chose the " + Policy.benefitLabel(Store.benefitChoice(c.id)).toLowerCase()) : "private sector")
                     .append(stopped ? "<br>Stopped: " + Html.esc(why) : "").append("</small></div>").append(Html.pill(p.paid ? "Paid" : stopped ? "Rejected" : "Pending")).append(act).append("</div>");
@@ -461,9 +476,9 @@ final class StaffPages {
             Citizen tc = Store.citizen(r.get("id"));
             String t = r.get("owed").replace(" ", "");
             if (tc == null) return Resp.to("/staff/records", "err:That ID number is not in the register.");
-            if (!t.matches("[0-9]{1,8}")) return Resp.to("/staff/records", "err:Wrong amount. Write the tax LRA says is owed in Maloti, digits only. Write 0 if nothing is owed.");
+            if (!t.matches("[0-9]{1,8}")) return Resp.to("/staff/records", "err:Wrong amount. Write the tax SRL says is owed in Maloti, digits only. Write 0 if nothing is owed.");
             Store.setTaxOwed(tc.id, Integer.parseInt(t));
-            return Resp.to("/staff/records", "ok:Saved. " + tc.name + " owes M " + Integer.parseInt(t) + " to LRA.");
+            return Resp.to("/staff/records", "ok:Saved. " + tc.name + " owes M " + Integer.parseInt(t) + " to SRL.");
         }
         if (r.post()) {
             Dept d;
@@ -500,11 +515,11 @@ final class StaffPages {
         List<String> depts = new ArrayList<>();
         depts.add("|Choose a department");
         for (Dept d : Dept.values()) if (d != Dept.FI) depts.add(d.name() + "|" + d.label);
-        sb.append(Html.label("TAX HELD BACK FOR LRA (FROM GRANTS AND PENSIONS)"));
-        sb.append(Html.card("<span class='mu'>Sent to LRA so far</span><b style='font-size:22px'>M " + Store.lraTotal() + "</b>"));
+        sb.append(Html.label("TAX HELD BACK FOR SRL (FROM GRANTS AND PENSIONS)"));
+        sb.append(Html.card("<span class='mu'>Sent to SRL so far</span><b style='font-size:22px'>M " + Store.lraTotal() + "</b>"));
         for (String[] t : Store.lraTransfers()) sb.append(Html.row(String.valueOf(t[1]), "ID " + t[0] + " · " + t[3], "<span class='pl m'>M " + t[2] + "</span>", null));
-        for (String[] t : Store.taxOwing()) sb.append(Html.row(String.valueOf(t[1]), "LRA says this person owes tax. It is taken from the next payment.", "<span class='pl m'>M " + t[2] + "</span>", null));
-        sb.append(Html.form("/staff/records", Html.hidden("act", "tax") + Html.field("ID number", "id", "text", "") + Html.field("Tax LRA says is owed (Maloti)", "owed", "text", "") + "<br>" + Html.button("Save LRA notice")));
+        for (String[] t : Store.taxOwing()) sb.append(Html.row(String.valueOf(t[1]), "SRL says this person owes tax. It is taken from the next payment.", "<span class='pl m'>M " + t[2] + "</span>", null));
+        sb.append(Html.form("/staff/records", Html.hidden("act", "tax") + Html.field("ID number", "id", "text", "") + Html.field("Tax SRL says is owed (Maloti)", "owed", "text", "") + "<br>" + Html.button("Save SRL notice")));
         sb.append(Html.label("ALLOCATE MONEY TO A DEPARTMENT"));
         sb.append(Html.form("/staff/records", Html.selectOf("Department", "dept", "", depts.toArray(new String[0])) + Html.field("Amount (Maloti)", "amount", "text", "")
                 + Html.field("What is it for?", "purpose", "text", "") + "<br>" + Html.button("Allocate")));
@@ -567,7 +582,7 @@ final class StaffPages {
         List<Citizen> l = Store.govtWorkers();
         for (Citizen c : l)
             sb.append("<div class='rw'>").append(av(o, c, 40)).append("<div><b>").append(Html.esc(c.name)).append("</b><small>ID ").append(c.id).append(" · ").append(Html.esc(Store.govtMinistry(c.id))).append(Store.benefitChoice(c.id) == null ? "" : " · chose the " + Policy.benefitLabel(Store.benefitChoice(c.id)).toLowerCase())
-                    .append("</small></div>").append(owner ? Html.form("/staff/govt", Html.hidden("id", c.id) + Html.hidden("act", "remove") + "<button class='sm'>Remove</button>") : "").append("</div>");
+                    .append("</small></div>").append(owner ? Html.form("/staff/govt", Html.hidden("id", c.id) + Html.hidden("act", "remove") + "<button class='sm' data-confirm='Remove this person from the government workers list?'>Remove</button>") : "").append("</div>");
         if (l.isEmpty()) sb.append(Html.mu("Nobody is marked yet."));
         return Resp.html(Html.page("Government Workers", B, "/staff", sb.toString()));
     }
@@ -682,7 +697,7 @@ final class StaffPages {
         List<String[]> l = Store.recentFines();
         for (String[] f : l) {
             Citizen c = Store.citizen(f[1]);
-            String act = f[7].equals("Unpaid") ? Html.form("/staff/fines", Html.hidden("id", f[0]) + Html.hidden("act", "paid") + "<button class='sm'>Mark paid</button>") : "";
+            String act = f[7].equals("Unpaid") ? Html.form("/staff/fines", Html.hidden("id", f[0]) + Html.hidden("act", "paid") + "<button class='sm' data-confirm='Mark this as paid? The citizen is told.'>Mark paid</button>") : "";
             sb.append("<div class='rw'>").append(av(o, c, 40)).append("<div><b>").append(Html.esc(c.name)).append("</b><small>").append(Html.esc(f[2])).append(" · M ").append(f[3]).append(" · ")
                     .append(Html.esc(f[4])).append(" · ").append(f[5]).append(f[8] == null || f[8].isEmpty() ? "" : " · receipt " + f[8]).append("</small></div>").append(Html.pill(f[7])).append(act).append("</div>");
         }
@@ -1073,7 +1088,7 @@ final class StaffPages {
             sb.append(Html.card("<div class='two'>" + av(o, c, 48) + "<div><b>" + Html.esc(c.name) + "</b><span class='mu'>ID " + c.id + "<br>Address on the register: " + Html.esc(c.address == null ? "" : c.address)
                     + "<br>" + (q.reason.startsWith("Fingerprints") ? "Police clearance " : "Case ") + Html.esc(q.caseNo) + " · asked by " + Html.esc(q.officer) + " · " + CitizenPages.WHEN.format(q.requested) + "<br>Reason: " + Html.esc(q.reason) + "</span></div></div>"
                     + "<form method='post' action='/staff/address'>" + Html.hidden("id", String.valueOf(q.id))
-                    + "<button class='sm' name='act' value='approve'>Approve</button> <button class='sm' name='act' value='reject'>Refuse</button></form>"));
+                    + "<button class='sm' name='act' value='approve'>Approve</button> <button class='sm' name='act' value='reject' data-confirm='Refuse this request? Police will not get the information.'>Refuse</button></form>"));
         }
         if (pending.isEmpty()) sb.append(Html.mu("No requests are waiting."));
         sb.append(Html.label("RECENT DECISIONS"));

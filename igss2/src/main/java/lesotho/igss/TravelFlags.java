@@ -133,7 +133,7 @@ final class TravelFlags {
             Citizen c = Store.citizen(fl.citizenId);
             String body = Html.esc(fl.kind) + "<span class='mu'>" + Html.esc(c == null ? fl.citizenId : c.name) + " · ID " + Html.esc(fl.citizenId) + " · " + Html.esc(deptLabel(fl.dept)) + " · " + day(fl.created)
                     + (fl.caseNo.isEmpty() ? "" : " · case " + Html.esc(fl.caseNo)) + (fl.details.isEmpty() ? "" : "<br>" + Html.esc(fl.details)) + "</span>";
-            if (police) body += Html.form("/staff/flags", Html.hidden("act", "lift") + Html.hidden("flag", String.valueOf(fl.id)) + "<button class='sm'>Lift flag</button>");
+            if (police) body += Html.form("/staff/flags", Html.hidden("act", "lift") + Html.hidden("flag", String.valueOf(fl.id)) + "<button class='sm' data-confirm='Lift this flag? The person can then get a passport again.'>Lift flag</button>");
             sb.append(Html.card("<b>" + body.replaceFirst("<span", "</b><span")));
         }
         if (all.isEmpty()) sb.append(Html.mu("No active flags."));

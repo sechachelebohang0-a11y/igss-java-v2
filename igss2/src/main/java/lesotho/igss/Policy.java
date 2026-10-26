@@ -45,7 +45,7 @@ public final class Policy {
     public enum Field {
         NAME("Name"), ID("ID number"), DOB("Date of birth"), PHOTO("Photo"), ADDRESS("Address"),
         PHONE("Phone"), LIFE("Life status"), FP("Fingerprint match"),
-        EMPLOYMENT("Employment"), TAX("Tax standing (LRA)");
+        EMPLOYMENT("Employment"), TAX("Tax standing (SRL)");
         public final String label;
         Field(String label) { this.label = label; }
     }
@@ -72,7 +72,7 @@ public final class Policy {
             case PHONE: return c.phone;
             case LIFE: return c.alive ? "Alive" : "Deceased";
             case EMPLOYMENT: return Store.govtWorker(c.id) ? "Government employee (" + Store.govtMinistry(c.id) + ")" : "Private sector employee";
-            case TAX: { int owed = Store.taxOwed(c.id); return owed <= 0 ? "Pays tax well. No tax owed to LRA." : "Does not pay tax well. M " + owed + " owed to LRA, taken from payments."; }
+            case TAX: { int owed = Store.taxOwed(c.id); return owed <= 0 ? "Pays tax well. No tax owed to SRL." : "Does not pay tax well. M " + owed + " owed to SRL, taken from payments."; }
             default: return fingerprintUsed ? "Match confirmed" : "Not used in this search";
         }
     }

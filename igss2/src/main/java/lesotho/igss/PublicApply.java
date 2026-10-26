@@ -448,6 +448,7 @@ final class PublicApply {
                 "<div class='top'><a href='/'>&lsaquo; Back</a></div><h2 class='t'>Apply without an account</h2>"
                         + "<p class='in'>You do not need to log in. Fill in the form, add your documents, and you get a reference number to follow your application. For an ID card, first get your birth certificate, create your account, then apply under Home Affairs services.</p>"
                         + "<a class='tile' href='/public/birth'><b>Birth certificate</b><small>For yourself or for your child. You get an ID number when Home Affairs approves it.</small></a>"
+                        + "<a class='tile' href='/ussd'><b>Phone without internet</b><small>Dial *123# on any phone to check an application, a pension payment or get a queue number.</small></a>"
                         + "<a class='tile' href='/public/track'><b>Check my application</b><small>Use your reference number and tracking code.</small></a>", false);
     }
 

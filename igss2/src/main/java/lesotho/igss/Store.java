@@ -350,7 +350,10 @@ public final class Store {
     public static List<Doc> uploadedDocs() { return Db.list("select * from documents where status='Uploaded' order by id", DOC); }
 
     // ---------- notifications and the access log ----------
-    public static void notify(String citizenId, String text) { Db.exec("insert into notifications(citizen_id,text,time) values(?,?,?)", citizenId, text, LocalDateTime.now()); }
+    public static void notify(String citizenId, String text) {
+        Db.exec("insert into notifications(citizen_id,text,time) values(?,?,?)", citizenId, text, LocalDateTime.now());
+        Ussd.logSms(citizenId, text);
+    }
     public static List<Notification> notesOf(String citizenId) { return Db.list("select * from notifications where citizen_id=? order by id desc", NOTE, citizenId); }
 
     /** Only the citizen reads this log (My Data page). Staff pages do not show it. */
@@ -458,8 +461,9 @@ public final class Store {
     };
 
     /** One-time renames from the earlier version: the old-age pension became the old-age grant, the retirement claim became the retirement pension. */
-    // ---------- tax standing (LRA tells us; Finance only holds money back) ----------
+    // ---------- tax standing (SRL tells us; Finance only holds money back) ----------
     public static void initTax() {
+        Db.exec("create table if not exists pension_invites(citizen_id text primary key, sent text)");
         Db.exec("create table if not exists tax_standing(citizen_id text primary key, owed integer, updated text)");
         Db.exec("create table if not exists lra_transfers(id integer primary key autoincrement,citizen_id text,amount integer,ref text,created text)");
         if (Db.count("select count(*) from tax_standing") == 0) {
@@ -471,7 +475,20 @@ public final class Store {
     public static void setTaxOwed(String citizenId, int owed) {
         Db.exec("insert or replace into tax_standing(citizen_id,owed,updated) values(?,?,?)", citizenId, Math.max(0, owed), LocalDate.now().toString());
     }
-    /** Money held back from a payment and sent to LRA. */
+    /** A government employee\'s choice is cleared so they can choose again. Not allowed once a benefit was paid. Returns an error text or null. */
+    public static String resetChoice(String citizenId) {
+        if (Db.count("select count(*) from payments where citizen_id=? and kind in ('PENSION','GRANT') and paid=1", citizenId) > 0)
+            return "A grant or pension was already paid to this person, so the choice cannot be changed.";
+        Db.exec("delete from benefit_choice where citizen_id=?", citizenId);
+        Db.exec("delete from pension where citizen_id=?", citizenId);
+        Db.exec("delete from gov_pension where citizen_id=?", citizenId);
+        Db.exec("delete from payments where citizen_id=? and kind in ('PENSION','GRANT') and paid=0", citizenId);
+        return null;
+    }
+    public static boolean invitedToPension(String citizenId) { return Db.count("select count(*) from pension_invites where citizen_id=?", citizenId) > 0; }
+    public static void markInvited(String citizenId) { Db.exec("insert or ignore into pension_invites(citizen_id,sent) values(?,?)", citizenId, LocalDate.now().toString()); }
+
+    /** Money held back from a payment and sent to SRL. */
     public static void lraTransfer(String citizenId, int amount, String ref) {
         Db.exec("insert into lra_transfers(citizen_id,amount,ref,created) values(?,?,?,?)", citizenId, amount, ref, LocalDateTime.now().toString());
     }
@@ -515,6 +532,7 @@ public final class Store {
     public static void initIdCards() {
         Db.exec("create table if not exists id_cards(citizen_id text primary key, issued text)");
         Db.exec("create table if not exists dept_notices(id integer primary key autoincrement,dept text,citizen_id text,text text,created text)");
+        Db.exec("delete from dept_notices where text not like '%You are told because you hold%'"); // old notices that were sent to every department
         if (Db.count("select count(*) from id_cards") == 0)
             Db.exec("insert into id_cards(citizen_id,issued) select id, date('now') from citizens where dob <= date('now','-16 years')");
     }
@@ -527,17 +545,24 @@ public final class Store {
         Db.exec("update citizens set registered_name=? where id=? and registered_name is not null and registered_name<>''", newName, citizenId);
     }
     /** The departments (other than Home Affairs) that hold something about this person. */
-    public static java.util.Set<Dept> connectedDepts(String citizenId) {
-        java.util.Set<Dept> s = new java.util.LinkedHashSet<>();
-        for (String d : Db.list("select distinct dept from applications where citizen_id=?", rs -> rs.getString(1), citizenId)) try { s.add(Dept.valueOf(d)); } catch (Exception ignored) { }
-        if (pensionEnrolled(citizenId) || enrolled(citizenId)) s.add(Dept.PE);
-        if (govtWorker(citizenId)) { s.add(Dept.FI); s.add(Dept.PE); }
-        if (Db.count("select count(*) from payments where citizen_id=?", citizenId) > 0) s.add(Dept.FI);
-        if (Db.count("select count(*) from passports where citizen_id=?", citizenId) > 0) s.add(Dept.PA);
-        if (Db.count("select count(*) from traffic_records where citizen_id=?", citizenId) > 0) s.add(Dept.TR);
-        if (Db.count("select count(*) from cases where citizen_id=?", citizenId) > 0) s.add(Dept.PO);
-        s.remove(Dept.HA);
-        return s;
+    /** The departments (other than Home Affairs) that hold a real record about this person, with the reason for each. */
+    public static java.util.Map<Dept, String> connectedDepts(String citizenId) {
+        java.util.Map<Dept, String> m = new java.util.LinkedHashMap<>();
+        for (Dept d : Dept.values()) {
+            if (d == Dept.HA) continue;
+            List<String> why = new ArrayList<>();
+            int apps = Db.count("select count(*) from applications where citizen_id=? and dept=? and status not in ('REJECTED','PAYMENT_DUE')", citizenId, d.name());
+            if (apps > 0) why.add(apps + " application" + (apps == 1 ? "" : "s"));
+            if (d == Dept.PE && (pensionEnrolled(citizenId) || enrolled(citizenId))) why.add("a grant or pension registration");
+            if ((d == Dept.PE || d == Dept.FI) && govtWorker(citizenId)) why.add("a place on the government workers list");
+            if (d == Dept.FI && Db.count("select count(*) from payments where citizen_id=?", citizenId) > 0) why.add("payments");
+            if (d == Dept.PA && Db.count("select count(*) from passports where citizen_id=?", citizenId) > 0) why.add("a passport");
+            if (d == Dept.TR && Db.count("select count(*) from traffic_records where citizen_id=?", citizenId) > 0) why.add("traffic records");
+            if (d == Dept.TR && Db.count("select count(*) from certificates where citizen_id=?", citizenId) > 0) why.add("a licence or certificate");
+            if (d == Dept.PO && Db.count("select count(*) from cases where citizen_id=?", citizenId) > 0) why.add("a police case");
+            if (!why.isEmpty()) m.put(d, String.join(", ", why));
+        }
+        return m;
     }
     public static void noticeDept(Dept d, String citizenId, String text) {
         Db.exec("insert into dept_notices(dept,citizen_id,text,created) values(?,?,?,?)", d.name(), citizenId, text, LocalDateTime.now().toString());

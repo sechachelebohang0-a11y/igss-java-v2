@@ -207,7 +207,7 @@ final class Display {
         d("Being processed", "E ntse e sebetsoa"); d("Ready to collect", "E loketse ho nkoa"); d("Collected", "E nkiloe");
         d("Rejected", "E hannoe"); d("The officer needs more information", "Ofisiri e hloka tlhahisoleseling e ngata");
         d("This is a prototype. No real money moves. Finance Services records the payment and issues the receipt.", "Ena ke mohlala. Ha ho chelete ea 'nete e fetisoang. Litšebeletso tsa Lichelete li ngola tefo 'me li fana ka resiti.");
-        d("Pay with", "Lefa ka"); d("Mobile money", "Chelete ea mohala"); d("Bank card", "Karete ea banka"); d("Bank transfer", "Phetiso ea banka");
+        d("Pay with", "Lefa ka"); d("M-Pesa", "M-Pesa"); d("EcoCash", "EcoCash"); d("Bank card", "Karete ea banka"); d("Bank transfer", "Phetiso ea banka");
         d("Phone or card number", "Nomoro ea mohala kapa ea karete");
         d("Fingerprint scanned and saved.", "Monoana o skenoe 'me o bolokiloe.");
 
@@ -411,6 +411,11 @@ final class Display {
         String out = html;
         for (String[] t : TWEAKS) out = out.replace(t[0], t[1]);
         if (st) out = translate(out).replace("<html lang='en'>", "<html lang='st'>");
+        if (!out.contains("id='main'")) {
+            for (String c : new String[]{"<div class='body'>", "<div class='phone'>", "<div class='wrap'>"})
+                if (out.contains(c)) { out = out.replaceFirst(java.util.regex.Pattern.quote(c), java.util.regex.Matcher.quoteReplacement(c.substring(0, c.length() - 1) + " id='main' role='main'>")); break; }
+        }
+        out = out.replaceFirst("<body>", "<body><a class='skip' href='#main'>" + (st ? "Tlola ho litaba" : "Skip to main content") + "</a>");
         return out.contains("</body>") ? out.replace("</body>", toolbar(st, uri) + "</body>") : out;
     }
 
@@ -420,6 +425,21 @@ final class Display {
             #a11y a.on{background:#2f6fdc;color:#fff}
             #a11y button:focus-visible,#a11y a:focus-visible{outline:3px solid #ffd54a}
             @media print{#a11y{display:none!important}}
+            .skip{position:absolute;left:-9999px;top:0;z-index:10000;background:#fff;color:#0a2a8f;padding:10px 14px;font:700 14px Arial,sans-serif;border:2px solid #0a2a8f}
+            .skip:focus{left:8px;top:8px}
+            a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+            html.hc body{background:#fff!important;color:#000!important}
+            html.hc #app,html.hc .phone,html.hc .sheet,html.hc .wrap{background:#fff!important;color:#000!important}
+            html.hc .hdr{background:#000!important;color:#fff!important}
+            html.hc .card,html.hc .rw,html.hc .tl,html.hc .tile,html.hc fieldset,html.hc .part,html.hc .known{background:#fff!important;border:2px solid #000!important;color:#000!important}
+            html.hc *{text-shadow:none!important}
+            html.hc input,html.hc select,html.hc textarea{background:#fff!important;color:#000!important;border:2px solid #000!important}
+            html.hc .bt,html.hc .btn,html.hc .pl,html.hc .pill{background:#000!important;color:#fff!important;border:2px solid #000!important}
+            html.hc .sm{background:#fff!important;color:#000!important;border:2px solid #000!important}
+            html.hc small,html.hc .mu,html.hc .lb,html.hc .in,html.hc b,html.hc h1,html.hc h2,html.hc legend{color:#000!important}
+            html.hc a{text-decoration:underline}
+            html.hc .ok{background:#fff!important;color:#000!important;border:3px solid #006400!important}
+            html.hc .err{background:#fff!important;color:#000!important;border:3px solid #b00020!important}
             label.bad{color:#b3261e!important}
             label.bad input,label.bad select,label.bad textarea{border:2px solid #b3261e!important;color:#b3261e!important}
             .fe{display:flex;gap:8px;align-items:flex-start;color:#b3261e;font:600 13px/1.4 Arial,Helvetica,sans-serif;margin:-6px 2px 12px}
@@ -475,6 +495,11 @@ final class Display {
             """;
 
     private static final String BIG_JS = """
+            (function(){ var h=document.getElementById('a-hc'); if(!h) return; var on=false;
+              try{ on=localStorage.getItem('igss.hc')==='1'; }catch(e){}
+              function paint(){ document.documentElement.classList.toggle('hc',on); h.setAttribute('aria-pressed',on?'true':'false'); h.textContent='High contrast: '+(on?'on':'off'); }
+              h.onclick=function(){ on=!on; try{ localStorage.setItem('igss.hc',on?'1':'0'); }catch(e){} paint(); }; paint(); })();
+            document.addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('[data-confirm]'); if(b&&!confirm(b.getAttribute('data-confirm'))) e.preventDefault(); },true);
             (function(){ var b=document.getElementById('a-big'), z=1;
               b.onclick=function(){ z=z>=1.4?1:z+0.2; document.body.style.zoom=z; }; })();
             """;
@@ -493,6 +518,8 @@ final class Display {
               var h=document.querySelector('h1'); return (h?h.innerText+'. ':'')+root.innerText; }
             var vh=false; try{ vh=localStorage.getItem('igss.vh')==='1'; }catch(e){}
             function paint(){ $('a-vh').textContent=vh?'Voice help: on':'Voice help: off'; $('a-vh').setAttribute('aria-pressed',vh); }
+            $('a-read').onclick=function(){ say(pageText()); };
+            $('a-stop').onclick=function(){ if(synth) synth.cancel(); };
             $('a-vh').onclick=function(){ vh=!vh; try{ localStorage.setItem('igss.vh',vh?'1':'0'); }catch(e){} paint(); if(vh) say('Voice help: on'); };
             paint();
             var last=null;
@@ -516,8 +543,8 @@ final class Display {
         String next = URLEncoder.encode(uri, StandardCharsets.UTF_8);
         StringBuilder b = new StringBuilder("<style>" + BAR_CSS + "</style><div style='height:72px'></div>"
                 + "<div id='a11y' role='toolbar' aria-label='" + (st ? "Thuso" : "Help") + "'>");
-        if (!st) b.append("<button type='button' id='a-vh' aria-pressed='false'></button>");
-        b.append("<button type='button' id='a-big'>").append(st ? "Mongolo o moholo" : "Bigger text").append("</button>")
+        if (!st) b.append("<button type='button' id='a-read'>Listen</button><button type='button' id='a-stop'>Stop</button><button type='button' id='a-vh' aria-pressed='false'></button>");
+        b.append("<button type='button' id='a-big'>").append(st ? "Mongolo o moholo" : "Bigger text").append("</button><button type='button' id='a-hc' aria-pressed='false'>High contrast</button>")
                 .append("<a href='/lang?l=en&next=").append(next).append("'").append(st ? "" : " class='on'").append(">English</a>")
                 .append("<a href='/lang?l=st&next=").append(next).append("'").append(st ? " class='on'" : "").append(">Sesotho</a></div>")
                 .append("<script>").append(RESTRICT_JS).append(AUTOFILL_JS).append(BIG_JS).append(st ? "" : VOICE_JS).append("</script>");

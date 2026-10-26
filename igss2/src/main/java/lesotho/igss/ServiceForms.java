@@ -201,7 +201,7 @@ final class ServiceForms {
 
         reg("Payment Receipt Copy", "FI/RC-1", "Use this form to get a copy of a receipt you lost. There is no fee.",
                 new Sec("The payment", txt("receipt", "Receipt number (if you know it)", false), dt("paid_date", "Date you paid", true), num("amount", "Amount paid (Maloti)", true),
-                        txt("paid_for", "What did you pay for?", true), sel("method", "How did you pay?", true, "Mobile money", "Bank card", "Bank transfer", "Cash at an office")));
+                        txt("paid_for", "What did you pay for?", true), sel("method", "How did you pay?", true, "M-Pesa", "EcoCash", "Bank card", "Bank transfer", "Cash at an office")));
 
         // ---------------------------------------------------------------- PENSIONS
         reg("Old-Age Grant Application", "PE/OA-1", "Use this form to apply for the monthly old-age grant. You must be aged " + Policy.PENSION_AGE + " or above.",
@@ -209,7 +209,8 @@ final class ServiceForms {
                 new Sec("Your household", sel("marital", "Marital status", true, MARITAL.toArray(new String[0])), txt("spouse", "Spouse's full name (if married)", false).when("marital", "Married"),
                         num("household", "How many people live in your home?", true), yn("other_grant", "Do you receive another pension or government grant?", true)),
                 residence("Where you live"),
-                new Sec("How should the grant be paid?", sel("pay_method", "Payment method", true, "Bank account", "Lesotho PostBank", "Cash at the pay point"),
+                new Sec("How should the grant be paid?", sel("pay_method", "Payment method", true, "Bank account", "Lesotho PostBank", "M-Pesa", "EcoCash", "Cash at the pay point"),
+                        tel("mobile_no", "Your M-Pesa or EcoCash phone number", false).when("pay_method", "M-Pesa", "EcoCash"),
                         selList("bank", "Bank (if paid into an account)", false, BANKS).when("pay_method", "Bank account"), idnum("acc_no", "Account number (if paid into an account)", false).when("pay_method", "Bank account", "Lesotho PostBank")),
                 new Sec("Next of kin", txt("kin_name", "Full name", true), txt("kin_rel", "Relationship to you", true), tel("kin_tel", "Phone number", false)));
 

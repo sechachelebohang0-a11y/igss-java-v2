@@ -22,6 +22,45 @@ final class Registry {
     static boolean issuing(Status st) { return st == Status.APPROVED || st == Status.READY || st == Status.COMPLETED; }
 
     /** Runs before the application form. Returns a page to show instead, or null when the citizen may go on. */
+    // ------------------------------------------------------------------ pensions: automatic work
+    /** Every month Pensions sends the grant and pension payments to Finance. Safe to run again: nobody is sent twice for the same month. */
+    static synchronized int sendMonthlyBenefits() {
+        java.time.YearMonth ym = java.time.YearMonth.now();
+        int sent = 0;
+        for (String kind : new String[]{"GRANT", "PENSION"}) {
+            List<Citizen> reg = kind.equals("GRANT") ? Store.enrolledList() : Store.pensionList();
+            for (Citizen c : reg) {
+                if (!c.alive || Store.benefitProblem(c, kind) != null || Store.pensionPayment(c.id, ym, kind) != null) continue;
+                Store.addPayment(c.id, kind, Policy.benefitLabel(kind) + " " + ym, Policy.benefitAmount(kind), ym.toString(), false, null, 0);
+                Store.notify(c.id, "Your " + Policy.benefitLabel(kind).toLowerCase() + " for " + ym + " was sent to Finance for payment.");
+                sent++;
+            }
+        }
+        return sent;
+    }
+
+    /** Tells each citizen once when they reach pension age and have not applied. */
+    static synchronized int inviteNewPensioners() {
+        int n = 0;
+        LocalDate today = LocalDate.now();
+        for (Citizen c : Store.allCitizens()) {
+            if (!c.alive || !c.hasAccount() || !Policy.pensionAge(c, today) || Store.enrolled(c.id) || Store.pensionEnrolled(c.id) || Store.invitedToPension(c.id)) continue;
+            Store.notify(c.id, "You are " + Policy.age(c, today) + ". You can now get the old-age grant or the retirement pension. "
+                    + (Store.govtWorker(c.id) ? "You work for the government, so you must choose one of them. Open My Pension to choose." : "Open My Pension to apply."));
+            Store.markInvited(c.id);
+            n++;
+        }
+        return n;
+    }
+
+    /** Runs the two jobs above when the app starts and then every 6 hours. */
+    static void startPensionJob() {
+        java.util.concurrent.ScheduledExecutorService ex = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(rn -> { Thread t = new Thread(rn, "pension-job"); t.setDaemon(true); return t; });
+        ex.scheduleWithFixedDelay(() -> {
+            try { inviteNewPensioners(); sendMonthlyBenefits(); } catch (RuntimeException e) { e.printStackTrace(); }
+        }, 5, 6 * 60 * 60, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
     private static final java.util.ArrayDeque<Long> LOOKUPS = new java.util.ArrayDeque<>();
     /**
      * Parent autofill on the birth forms: an ID number gives the name and date of birth only (never email, phone or address).

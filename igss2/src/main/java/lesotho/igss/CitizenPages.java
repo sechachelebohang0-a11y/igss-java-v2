@@ -102,6 +102,7 @@ final class CitizenPages {
         List<String[]> t = new ArrayList<>();
         for (Models.Dept d : Models.Dept.values()) t.add(new String[]{"/services?dept=" + d.name(), d.icon, d.label});
         t.add(new String[]{"/apps", "doc", "My Applications"});
+        t.add(new String[]{"/sms", "bell", "SMS Messages"});
         t.add(new String[]{"/docs", "folder", "My Documents"});
         t.add(new String[]{"/photo", "user", "My Photo"});
         t.add(new String[]{"/fingerprints", "fp", "My Fingerprints"});
@@ -182,12 +183,12 @@ final class CitizenPages {
         return Resp.html(Html.page("My Photo", B, "/home", body));
     }
 
-    /** What Finance holds for this citizen: fees paid, grant and pension payments, and tax held back for LRA. */
+    /** What Finance holds for this citizen: fees paid, grant and pension payments, and tax held back for SRL. */
     private static String financeMine(Citizen me) {
         StringBuilder sb = new StringBuilder();
         int owed = Store.taxOwed(me.id);
-        sb.append(Html.label("MY TAX STANDING (FROM LRA)")).append(Html.card(owed <= 0 ? "<b>No tax owed</b><span class='mu'>Nothing is taken from your grant or pension.</span>"
-                : "<b>M " + owed + " owed to LRA</b><span class='mu'>This is taken from your next grant or pension payment and sent to LRA. Finance does not collect tax itself.</span>"));
+        sb.append(Html.label("MY TAX STANDING (FROM SRL)")).append(Html.card(owed <= 0 ? "<b>No tax owed</b><span class='mu'>Nothing is taken from your grant or pension.</span>"
+                : "<b>M " + owed + " owed to SRL</b><span class='mu'>This is taken from your next grant or pension payment and sent to SRL. Finance does not collect tax itself.</span>"));
         sb.append(Html.label("MY GRANT AND PENSION PAYMENTS"));
         int n = 0;
         for (Models.Payment p : Store.benefitPaymentsOf(me.id)) {
@@ -197,7 +198,7 @@ final class CitizenPages {
         if (n == 0) sb.append(Html.mu("No payments yet."));
         List<String[]> lra = Store.lraOf(me.id);
         if (!lra.isEmpty()) {
-            sb.append(Html.label("TAX TAKEN AND SENT TO LRA"));
+            sb.append(Html.label("TAX TAKEN AND SENT TO SRL"));
             for (String[] t : lra) sb.append(Html.row("M " + t[0], t[1], "", null));
         }
         sb.append(Html.label("MY FEE PAYMENTS (RECEIPTS)"));
@@ -300,18 +301,22 @@ final class CitizenPages {
         Application a = mine(r, me);
         if (a == null || a.status != Status.PAYMENT_DUE) return Resp.to("/apps", "err:Nothing to pay for this application.");
         if (r.post()) {
-            if (r.get("account").length() < 5) return Resp.to("/pay?id=" + a.id, "err:Enter the phone number or card number you are paying with.");
+            String method = r.get("method"), acct = r.get("account").replace(" ", "");
+            if (!List.of("M-Pesa", "EcoCash", "Bank card", "Bank transfer").contains(method)) return Resp.to("/pay?id=" + a.id, "err:Choose how you want to pay.");
+            if (method.equals("M-Pesa") || method.equals("EcoCash")) {
+                if (!acct.matches("(\\+?266)?[0-9]{8}")) return Resp.to("/pay?id=" + a.id, "err:Wrong phone number. Write your 8-digit " + method + " number. Example: 58123456.");
+            } else if (acct.length() < 5) return Resp.to("/pay?id=" + a.id, "err:Enter the card number or the bank account you are paying with.");
             String receipt = Store.nextReceipt();
             a.paid = true; a.receipt = receipt; a.status = Status.VERIFIED;
             Store.saveApp(a);
             Store.addPayment(me.id, "FEE", a.reference + " " + a.service, a.fee, null, true, receipt, a.id);
-            Store.notify(me.id, "Payment of M " + a.fee + " received by Finance for " + a.service + ". Receipt " + receipt + ".");
+            Store.notify(me.id, "Payment of M " + a.fee + " received by Finance with " + method + " for " + a.service + ". Receipt " + receipt + ".");
             return Resp.to("/app?id=" + a.id, "ok:Payment received. Receipt " + receipt + ". " + a.dept.label + " can now process your application.");
         }
         String body = Html.banner(r.get("m")) + Html.intro("Pay M " + a.fee + " for " + a.service)
                 + Html.mu("This is a prototype. No real money moves. Finance Services records the payment and issues the receipt.")
-                + Html.form("/pay", Html.hidden("id", String.valueOf(a.id)) + Html.select("Pay with", "method", "Mobile money", "Bank card", "Bank transfer")
-                + Html.field("Phone or card number", "account", "text", "") + "<br>" + Html.button("Pay M " + a.fee));
+                + Html.form("/pay", Html.hidden("id", String.valueOf(a.id)) + Html.select("Pay with", "method", "M-Pesa", "EcoCash", "Bank card", "Bank transfer")
+                + Html.field("Phone number (M-Pesa or EcoCash) or card number", "account", "text", me.phone == null ? "" : me.phone) + "<br>" + Html.button("Pay M " + a.fee));
         return Resp.html(Html.page("Pay Fee", "Application", "/app?id=" + a.id, body));
     }
 
@@ -636,7 +641,7 @@ final class CitizenPages {
             String shown = a.status.equals("Booked") && !open ? "Past" : a.status;
             sb.append("<div class='rw'><div><b>").append(Html.esc(a.dept.label)).append("</b><small>").append(Html.esc(a.service)).append(" · ").append(a.slot.format(WHEN)).append("</small></div>")
                     .append(Html.pill(shown))
-                    .append(open ? Html.form("/book", Html.hidden("act", "cancel") + Html.hidden("id", String.valueOf(a.id)) + "<button class='sm'>Cancel</button>") : "")
+                    .append(open ? Html.form("/book", Html.hidden("act", "cancel") + Html.hidden("id", String.valueOf(a.id)) + "<button class='sm' data-confirm='Cancel this appointment?'>Cancel</button>") : "")
                     .append("</div>");
         }
         if (mine.isEmpty()) sb.append(Html.mu("No appointments yet."));
