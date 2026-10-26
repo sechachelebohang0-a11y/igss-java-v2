@@ -506,6 +506,15 @@ final class CitizenPages {
 
     // ------------------------------------------------------------------ appointments and queue
     /** When the citizen came from one department's page, the department is fixed. From the main menu they can choose. */
+    /** Opened from one department: show only that department. Opened from the dashboard: let the citizen choose. */
+    private static String deptField(String selected) {
+        boolean locked = false;
+        for (Models.Dept d : Models.Dept.values()) if (d.name().equals(selected)) locked = true;
+        if (!locked) return deptSelect(selected);
+        Models.Dept d = dept(selected);
+        return "<label class='f'>Department<input type='text' value='" + Html.esc(d.label) + "' readonly style='background:#eef2fa'></label>" + Html.hidden("dept", d.name())
+                + "<a href='/book' style='font-size:12px;font-weight:700;color:#1a4fb4;margin:-4px 0 8px;display:block'>Choose another department</a>";
+    }
     private static String deptSelect(String selected) {
         boolean fixed = false;
         for (Models.Dept d : Models.Dept.values()) if (d.name().equals(selected)) fixed = true;
@@ -611,11 +620,11 @@ final class CitizenPages {
 
         sb.append(Html.label("JOIN THE QUEUE NOW")).append(Html.card(
                 Html.mu("You get a queue number. Come to the office and wait for your number to be called.")
-                        + Html.form("/book", Html.hidden("act", "queue") + deptSelect(selDept) + serviceBox(dept(selDept), svc) + "<br>" + Html.button("Get my queue number"))));
+                        + Html.form("/book", Html.hidden("act", "queue") + deptField(selDept) + serviceBox(dept(selDept), svc) + "<br>" + Html.button("Get my queue number"))));
 
         sb.append(Html.label("BOOK A TIME")).append(Html.card(
                 Html.mu("Offices are open Monday to Friday, 08:00 to 16:00.")
-                        + Html.form("/book", Html.hidden("act", "book") + deptSelect(selDept) + serviceBox(dept(selDept), svc)
+                        + Html.form("/book", Html.hidden("act", "book") + deptField(selDept) + serviceBox(dept(selDept), svc)
                         + "<label class='f'>Date<input type='date' name='date' min='" + today + "' max='" + today.plusDays(60) + "' required></label>"
                         + "<label class='f'>Time<select name='time'>" + timeOpts + "</select></label>"
                         + "<br>" + Html.button("Book appointment"))));

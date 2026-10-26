@@ -491,8 +491,6 @@ final class Display {
               chunks(t).forEach(function(c){ var u=new SpeechSynthesisUtterance(c); u.lang=v?v.lang:'en-GB'; if(v)u.voice=v; u.rate=0.95; synth.speak(u); }); }
             function pageText(){ var root=document.querySelector('.body')||document.querySelector('.sheet')||document.querySelector('.phone')||document.querySelector('.wrap')||document.body;
               var h=document.querySelector('h1'); return (h?h.innerText+'. ':'')+root.innerText; }
-            $('a-read').onclick=function(){ say(pageText()); };
-            $('a-stop').onclick=function(){ if(synth) synth.cancel(); };
             var vh=false; try{ vh=localStorage.getItem('igss.vh')==='1'; }catch(e){}
             function paint(){ $('a-vh').textContent=vh?'Voice help: on':'Voice help: off'; $('a-vh').setAttribute('aria-pressed',vh); }
             $('a-vh').onclick=function(){ vh=!vh; try{ localStorage.setItem('igss.vh',vh?'1':'0'); }catch(e){} paint(); if(vh) say('Voice help: on'); };
@@ -502,10 +500,6 @@ final class Display {
               if(el.matches('input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]),textarea')) last=el;
               if(vh&&el.matches('input,select,textarea,button,a')){ var lab=el.closest('label');
                 var txt=(lab?lab.innerText:(el.innerText||el.getAttribute('aria-label')||el.value||'')).split('\\n')[0]; if(txt) say(txt); } });
-            $('a-mic').onclick=function(){ if(!SR){alert('Your browser cannot listen. Try Chrome.');return;}
-              var rec=new SR(); rec.lang='en-GB';
-              rec.onresult=function(e){ if(last){ last.removeAttribute('readonly'); last.value=e.results[0][0].transcript; last.dispatchEvent(new Event('input')); } };
-              rec.start(); };
             })();
             """;
 
@@ -522,8 +516,7 @@ final class Display {
         String next = URLEncoder.encode(uri, StandardCharsets.UTF_8);
         StringBuilder b = new StringBuilder("<style>" + BAR_CSS + "</style><div style='height:72px'></div>"
                 + "<div id='a11y' role='toolbar' aria-label='" + (st ? "Thuso" : "Help") + "'>");
-        if (!st) b.append("<button type='button' id='a-read'>Listen</button><button type='button' id='a-stop'>Stop</button>"
-                + "<button type='button' id='a-vh' aria-pressed='false'></button><button type='button' id='a-mic'>Speak</button>");
+        if (!st) b.append("<button type='button' id='a-vh' aria-pressed='false'></button>");
         b.append("<button type='button' id='a-big'>").append(st ? "Mongolo o moholo" : "Bigger text").append("</button>")
                 .append("<a href='/lang?l=en&next=").append(next).append("'").append(st ? "" : " class='on'").append(">English</a>")
                 .append("<a href='/lang?l=st&next=").append(next).append("'").append(st ? " class='on'" : "").append(">Sesotho</a></div>")
